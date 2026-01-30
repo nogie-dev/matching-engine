@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"container/list"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/nogie-dev/clob-trading/internal/models"
@@ -59,7 +60,7 @@ func (ob *OrderBook) AddOrder(order *models.MakerOrder) {
 	}
 
 	lvl, ok := levels[order.Price]
-	// 해당 호가에 존재하지 않으면
+	// 해당 호가에 존재하지 않으면 호가 생성
 	if !ok {
 		lvl = &util.PriceLevel{Price: order.Price, Queue: util.NewQueue()}
 		levels[order.Price] = lvl
@@ -67,6 +68,49 @@ func (ob *OrderBook) AddOrder(order *models.MakerOrder) {
 	}
 	lvl.TotalAmount += order.Amount
 	ob.Index[order.OrderID] = lvl.Queue.Push(order)
+}
+
+func (ob *OrderBook) RemoveOrder(order *models.MakerOrder) {
+	var levels map[float64]*util.PriceLevel
+	var h heap.Interface
+	switch order.Position {
+	case models.Bid:
+		levels, h = ob.Bids, &ob.bidLevels
+	case models.Ask:
+		levels, h = ob.Asks, &ob.askLevels
+	default:
+		return
+	}
+	lvl, ok := levels[order.Price]
+	if !ok || lvl == nil {
+		log.Printf("Price level not found: price=%.4f", order.Price)
+		return
+	}
+
+	elem, ok := ob.Index[order.OrderID]
+	if !ok || elem == nil {
+		log.Printf("Order not found in index: id=%s", order.OrderID)
+		return
+	}
+
+	removed := lvl.Queue.Remove(elem)
+	delete(ob.Index, order.OrderID)
+
+	var amt float64
+	if mo, ok := removed.(*models.MakerOrder); ok && mo != nil {
+		amt = mo.Amount
+	} else {
+		amt = order.Amount
+	}
+	lvl.TotalAmount -= amt
+
+	// 큐에 주문이 없을 경우 삭제
+	if lvl.Queue.Len() == 0 {
+		if lvl.Index >= 0 && lvl.Index < h.Len() {
+			heap.Remove(h, lvl.Index)
+		}
+		delete(levels, lvl.Price)
+	}
 }
 
 func (ob *OrderBook) PrintOrderBook() {
