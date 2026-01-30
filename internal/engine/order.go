@@ -107,14 +107,25 @@ func (ob *OrderBook) RemoveOrder(order *models.MakerOrder) {
 		return
 	}
 
+	ob.removeElement(lvl, levels, h, elem, order.Amount)
+}
+
+func (ob *OrderBook) removeElement(lvl *util.PriceLevel, levels map[float64]*util.PriceLevel, h heap.Interface, elem *list.Element, fallbackAmount float64) {
 	removed := lvl.Queue.Remove(elem)
-	delete(ob.Index, order.OrderID)
+
+	var orderID string
+	if mo, ok := elem.Value.(*models.MakerOrder); ok && mo != nil {
+		orderID = mo.OrderID
+	}
+	if orderID != "" {
+		delete(ob.Index, orderID)
+	}
 
 	var amt float64
 	if mo, ok := removed.(*models.MakerOrder); ok && mo != nil {
 		amt = mo.Amount
 	} else {
-		amt = order.Amount
+		amt = fallbackAmount
 	}
 	lvl.TotalAmount -= amt
 
@@ -127,10 +138,64 @@ func (ob *OrderBook) RemoveOrder(order *models.MakerOrder) {
 	}
 }
 
-// func (ob *OrderBook) EditOrder(order *models.MakerOrder) {
-// 	lvl, levels, h, ok := ob.level(order)
+// EditRequest는 주문 수정 요청 DTO다.
+type EditRequest struct {
+	OrderID  string          `json:"order_id"`
+	Position models.Position `json:"position"`
+	Price    float64         `json:"price"`
+	Amount   *float64        `json:"amount"` // nil이면 변경 없음
+}
 
-// }
+func (ob *OrderBook) EditOrder(req EditRequest) {
+	// 요청은 DTO 기준으로 처리하고, 실제 저장된 주문 객체를 수정한다.
+	lvl, levels, h, ok := ob.level(&models.MakerOrder{Position: req.Position, Price: req.Price})
+	if !ok {
+		return
+	}
+
+	elem, ok := ob.Index[req.OrderID]
+	if !ok || elem == nil {
+		log.Printf("Order not found: id=%s", req.OrderID)
+		return
+	}
+
+	existing, ok := elem.Value.(*models.MakerOrder)
+	if !ok || existing == nil {
+		log.Printf("Order type mismatch: id=%s", req.OrderID)
+		return
+	}
+
+	priceChanged := existing.Price != req.Price
+	amountChanged := req.Amount != nil && *req.Amount != existing.Amount
+
+	switch {
+	case priceChanged:
+		// 기존 레벨에서 제거 후 새 레벨로 재삽입
+		ob.removeElement(lvl, levels, h, elem, existing.Amount)
+		existing.Price = req.Price
+		if req.Amount != nil {
+			existing.Amount = *req.Amount
+		}
+		existing.Timestamp = time.Now()
+		ob.AddOrder(existing)
+	case amountChanged:
+		delta := *req.Amount - existing.Amount
+		if delta > 0 {
+			// 수량 증가: 우선순위 리셋을 위해 제거 후 재삽입
+			ob.removeElement(lvl, levels, h, elem, existing.Amount)
+			existing.Amount = *req.Amount
+			existing.Timestamp = time.Now()
+			ob.AddOrder(existing)
+		} else {
+			// 수량 감소: 위치 유지, 누적만 반영
+			existing.Amount = *req.Amount
+			existing.Timestamp = time.Now()
+			lvl.TotalAmount += delta
+		}
+	default:
+		// 변경 없음
+	}
+}
 
 func (ob *OrderBook) PrintOrderBook() {
 	bidHeap := append(util.MaxPriceHeap(nil), ob.bidLevels...)
