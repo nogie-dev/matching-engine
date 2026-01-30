@@ -32,6 +32,17 @@ func NewOrderBook(ticker string) *OrderBook {
 	return ob
 }
 
+func (ob *OrderBook) side(order *models.MakerOrder) (map[float64]*util.PriceLevel, heap.Interface, bool) {
+	switch order.Position {
+	case models.Bid:
+		return ob.Bids, &ob.bidLevels, true
+	case models.Ask:
+		return ob.Asks, &ob.askLevels, true
+	default:
+		return nil, nil, false
+	}
+}
+
 func CreateOrder(req models.RequestOrder) models.MakerOrder {
 	return models.MakerOrder{
 		OrderID:   util.GenerateOrderID(req),
@@ -70,26 +81,23 @@ func (ob *OrderBook) AddOrder(order *models.MakerOrder) {
 	ob.Index[order.OrderID] = lvl.Queue.Push(order)
 }
 
-func (ob *OrderBook) side(order *models.MakerOrder) (map[float64]*util.PriceLevel, heap.Interface, bool) {
-	switch order.Position {
-	case models.Bid:
-		return ob.Bids, &ob.bidLevels, true
-	case models.Ask:
-		return ob.Asks, &ob.askLevels, true
-	default:
-		return nil, nil, false
-	}
-}
-
-func (ob *OrderBook) RemoveOrder(order *models.MakerOrder) {
+func (ob *OrderBook) level(order *models.MakerOrder) (*util.PriceLevel, map[float64]*util.PriceLevel, heap.Interface, bool) {
 	levels, h, ok := ob.side(order)
 	if !ok {
 		log.Printf("Unsupported position: %v", order.Position)
-		return
+		return nil, nil, nil, false
 	}
 	lvl, ok := levels[order.Price]
 	if !ok || lvl == nil {
 		log.Printf("Price level not found: price=%.4f", order.Price)
+		return nil, nil, nil, false
+	}
+	return lvl, levels, h, true
+}
+
+func (ob *OrderBook) RemoveOrder(order *models.MakerOrder) {
+	lvl, levels, h, ok := ob.level(order)
+	if !ok {
 		return
 	}
 
@@ -118,6 +126,11 @@ func (ob *OrderBook) RemoveOrder(order *models.MakerOrder) {
 		delete(levels, lvl.Price)
 	}
 }
+
+// func (ob *OrderBook) EditOrder(order *models.MakerOrder) {
+// 	lvl, levels, h, ok := ob.level(order)
+
+// }
 
 func (ob *OrderBook) PrintOrderBook() {
 	bidHeap := append(util.MaxPriceHeap(nil), ob.bidLevels...)
