@@ -70,15 +70,21 @@ func (ob *OrderBook) AddOrder(order *models.MakerOrder) {
 	ob.Index[order.OrderID] = lvl.Queue.Push(order)
 }
 
-func (ob *OrderBook) RemoveOrder(order *models.MakerOrder) {
-	var levels map[float64]*util.PriceLevel
-	var h heap.Interface
+func (ob *OrderBook) side(order *models.MakerOrder) (map[float64]*util.PriceLevel, heap.Interface, bool) {
 	switch order.Position {
 	case models.Bid:
-		levels, h = ob.Bids, &ob.bidLevels
+		return ob.Bids, &ob.bidLevels, true
 	case models.Ask:
-		levels, h = ob.Asks, &ob.askLevels
+		return ob.Asks, &ob.askLevels, true
 	default:
+		return nil, nil, false
+	}
+}
+
+func (ob *OrderBook) RemoveOrder(order *models.MakerOrder) {
+	levels, h, ok := ob.side(order)
+	if !ok {
+		log.Printf("Unsupported position: %v", order.Position)
 		return
 	}
 	lvl, ok := levels[order.Price]
