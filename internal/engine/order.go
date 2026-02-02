@@ -148,11 +148,6 @@ type EditRequest struct {
 
 func (ob *OrderBook) EditOrder(req EditRequest) {
 	// 요청은 DTO 기준으로 처리하고, 실제 저장된 주문 객체를 수정한다.
-	lvl, levels, h, ok := ob.level(&models.MakerOrder{Position: req.Position, Price: req.Price})
-	if !ok {
-		return
-	}
-
 	elem, ok := ob.Index[req.OrderID]
 	if !ok || elem == nil {
 		log.Printf("Order not found: id=%s", req.OrderID)
@@ -162,6 +157,12 @@ func (ob *OrderBook) EditOrder(req EditRequest) {
 	existing, ok := elem.Value.(*models.MakerOrder)
 	if !ok || existing == nil {
 		log.Printf("Order type mismatch: id=%s", req.OrderID)
+		return
+	}
+
+	// 현재 레벨은 기존 주문 가격 기준으로 찾는다.
+	lvl, levels, h, ok := ob.level(&models.MakerOrder{Position: existing.Position, Price: existing.Price})
+	if !ok {
 		return
 	}
 
