@@ -6,8 +6,8 @@ import (
 	"github.com/nogie-dev/clob-trading/internal/models"
 )
 
-func newOrder(id string, pos models.Position, price, amount float64) *models.MakerOrder {
-	return &models.MakerOrder{
+func newOrder(id string, pos models.Position, price, amount float64) *models.BookOrder {
+	return &models.BookOrder{
 		OrderID:  id,
 		Position: pos,
 		Price:    price,
@@ -35,7 +35,7 @@ func TestAddAndRemoveOrder(t *testing.T) {
 		t.Fatalf("order index not recorded")
 	}
 
-	ob.RemoveOrder(order)
+	ob.RemoveOrder("1")
 
 	if _, ok := ob.Bids[100]; ok {
 		t.Fatalf("price level should be removed after last order")
@@ -57,7 +57,7 @@ func TestEditOrderAmountIncreaseMovesToBack(t *testing.T) {
 
 	// "1" 의 주문 수량 증가
 	newAmt := 2.0
-	req := EditRequest{OrderID: "1", Position: models.Bid, Price: 100, Amount: &newAmt}
+	req := models.EditRequest{OrderID: "1", Position: models.Bid, Price: 100, Amount: &newAmt}
 	ob.EditOrder(req)
 
 	lvl, ok := ob.Bids[100]
@@ -72,7 +72,7 @@ func TestEditOrderAmountIncreaseMovesToBack(t *testing.T) {
 
 	var ids []string
 	lvl.Queue.ForEach(func(v interface{}) {
-		if mo, ok := v.(*models.MakerOrder); ok {
+		if mo, ok := v.(*models.BookOrder); ok {
 			ids = append(ids, mo.OrderID)
 		}
 	})
@@ -94,7 +94,7 @@ func TestEditOrderPriceChangeMovesLevel(t *testing.T) {
 	o1 := newOrder("1", models.Bid, 100, 1)
 	ob.AddOrder(o1)
 
-	req := EditRequest{OrderID: "1", Position: models.Bid, Price: 101}
+	req := models.EditRequest{OrderID: "1", Position: models.Bid, Price: 101}
 	ob.EditOrder(req)
 
 	// 호가 변경 시 주문이 호가 간 이동을 하는가
@@ -119,7 +119,7 @@ func TestEditOrderAmountDecreaseKeepsOrder(t *testing.T) {
 
 	// 주문 수량 감소
 	newAmt := 1.0
-	req := EditRequest{OrderID: "1", Position: models.Bid, Price: 100, Amount: &newAmt}
+	req := models.EditRequest{OrderID: "1", Position: models.Bid, Price: 100, Amount: &newAmt}
 	ob.EditOrder(req)
 
 	lvl, ok := ob.Bids[100]
@@ -132,7 +132,7 @@ func TestEditOrderAmountDecreaseKeepsOrder(t *testing.T) {
 
 	var ids []string
 	lvl.Queue.ForEach(func(v interface{}) {
-		if mo, ok := v.(*models.MakerOrder); ok {
+		if mo, ok := v.(*models.BookOrder); ok {
 			ids = append(ids, mo.OrderID)
 		}
 	})

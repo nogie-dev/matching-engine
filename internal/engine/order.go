@@ -32,7 +32,7 @@ func NewOrderBook(ticker string) *OrderBook {
 	return ob
 }
 
-func (ob *OrderBook) side(order *models.MakerOrder) (map[float64]*util.PriceLevel, heap.Interface, bool) {
+func (ob *OrderBook) side(order *models.BookOrder) (map[float64]*util.PriceLevel, heap.Interface, bool) {
 	switch order.Position {
 	case models.Bid:
 		return ob.Bids, &ob.bidLevels, true
@@ -43,8 +43,8 @@ func (ob *OrderBook) side(order *models.MakerOrder) (map[float64]*util.PriceLeve
 	}
 }
 
-func CreateOrder(req models.RequestOrder) models.MakerOrder {
-	return models.MakerOrder{
+func CreateOrder(req models.RequestOrder) models.BookOrder {
+	return models.BookOrder{
 		OrderID:   util.GenerateOrderID(req),
 		Ticker:    req.Ticker,
 		UserID:    req.UserID,
@@ -58,7 +58,7 @@ func CreateOrder(req models.RequestOrder) models.MakerOrder {
 	}
 }
 
-func (ob *OrderBook) AddOrder(order *models.MakerOrder) {
+func (ob *OrderBook) AddOrder(order *models.BookOrder) {
 	var levels map[float64]*util.PriceLevel
 	var h heap.Interface
 	switch order.Position {
@@ -81,7 +81,7 @@ func (ob *OrderBook) AddOrder(order *models.MakerOrder) {
 	ob.Index[order.OrderID] = lvl.Queue.Push(order)
 }
 
-func (ob *OrderBook) level(order *models.MakerOrder) (*util.PriceLevel, map[float64]*util.PriceLevel, heap.Interface, bool) {
+func (ob *OrderBook) level(order *models.BookOrder) (*util.PriceLevel, map[float64]*util.PriceLevel, heap.Interface, bool) {
 	levels, h, ok := ob.side(order)
 	if !ok {
 		log.Printf("Unsupported position: %v", order.Position)
@@ -95,26 +95,32 @@ func (ob *OrderBook) level(order *models.MakerOrder) (*util.PriceLevel, map[floa
 	return lvl, levels, h, true
 }
 
-func (ob *OrderBook) RemoveOrder(order *models.MakerOrder) {
-	lvl, levels, h, ok := ob.level(order)
+func (ob *OrderBook) RemoveOrder(orderID string) {
+	elem, ok := ob.Index[orderID]
+	if !ok || elem == nil {
+		log.Printf("Order not found in index: id=%s", orderID)
+		return
+	}
+
+	current, ok := elem.Value.(*models.BookOrder)
+	if !ok || current == nil {
+		log.Printf("Order type mismatch: id=%s", orderID)
+		return
+	}
+
+	lvl, levels, h, ok := ob.level(current)
 	if !ok {
 		return
 	}
 
-	elem, ok := ob.Index[order.OrderID]
-	if !ok || elem == nil {
-		log.Printf("Order not found in index: id=%s", order.OrderID)
-		return
-	}
-
-	ob.removeElement(lvl, levels, h, elem, order.Amount)
+	ob.removeElement(lvl, levels, h, elem, current.Amount)
 }
 
 func (ob *OrderBook) removeElement(lvl *util.PriceLevel, levels map[float64]*util.PriceLevel, h heap.Interface, elem *list.Element, fallbackAmount float64) {
 	removed := lvl.Queue.Remove(elem)
 
 	var orderID string
-	if mo, ok := elem.Value.(*models.MakerOrder); ok && mo != nil {
+	if mo, ok := elem.Value.(*models.BookOrder); ok && mo != nil {
 		orderID = mo.OrderID
 	}
 	if orderID != "" {
@@ -122,7 +128,7 @@ func (ob *OrderBook) removeElement(lvl *util.PriceLevel, levels map[float64]*uti
 	}
 
 	var amt float64
-	if mo, ok := removed.(*models.MakerOrder); ok && mo != nil {
+	if mo, ok := removed.(*models.BookOrder); ok && mo != nil {
 		amt = mo.Amount
 	} else {
 		amt = fallbackAmount
@@ -138,15 +144,7 @@ func (ob *OrderBook) removeElement(lvl *util.PriceLevel, levels map[float64]*uti
 	}
 }
 
-// EditRequest는 주문 수정 요청 DTO다.
-type EditRequest struct {
-	OrderID  string          `json:"order_id"`
-	Position models.Position `json:"position"`
-	Price    float64         `json:"price"`
-	Amount   *float64        `json:"amount"` // nil이면 변경 없음
-}
-
-func (ob *OrderBook) EditOrder(req EditRequest) {
+func (ob *OrderBook) EditOrder(req models.EditRequest) {
 	// 요청은 DTO 기준으로 처리하고, 실제 저장된 주문 객체를 수정한다.
 	elem, ok := ob.Index[req.OrderID]
 	if !ok || elem == nil {
@@ -154,14 +152,14 @@ func (ob *OrderBook) EditOrder(req EditRequest) {
 		return
 	}
 
-	existing, ok := elem.Value.(*models.MakerOrder)
+	existing, ok := elem.Value.(*models.BookOrder)
 	if !ok || existing == nil {
 		log.Printf("Order type mismatch: id=%s", req.OrderID)
 		return
 	}
 
 	// 현재 레벨은 기존 주문 가격 기준으로 찾는다.
-	lvl, levels, h, ok := ob.level(&models.MakerOrder{Position: existing.Position, Price: existing.Price})
+	lvl, levels, h, ok := ob.level(&models.BookOrder{Position: existing.Position, Price: existing.Price})
 	if !ok {
 		return
 	}
