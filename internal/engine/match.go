@@ -10,12 +10,6 @@ type Matcher struct {
 	books map[string]*OrderBook
 }
 
-func NewMatcher() *Matcher {
-	return &Matcher{
-		books: make(map[string]*OrderBook),
-	}
-}
-
 func (m *Matcher) GetOrderBook(ticker string) *OrderBook {
 	if _, ok := m.books[ticker]; !ok {
 		log.Fatal("Not Exist OrderBook")
@@ -23,7 +17,3 @@ func (m *Matcher) GetOrderBook(ticker string) *OrderBook {
 	}
 	return m.books[ticker]
 }
-
-// func (m *Matcher) MatchingOrder(orderbook *OrderBook){
-// 	switch orderbook.Bids
-// }
