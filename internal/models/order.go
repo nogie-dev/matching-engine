@@ -26,7 +26,7 @@ type BookOrder struct {
 	OrderID   string      `json:"order_id"`   // 주문 고유 ID
 	UserID    string      `json:"user_id"`    // 사용자 ID
 	OrderType OrderType   `json:"order_type"` // LIMIT, MARKET
-	Position  Position    `json:"position"`   // BUY, SELL
+	Position  Position    `json:"position"`   // BID, ASK
 	Price     float64     `json:"price"`      // 가격
 	Amount    float64     `json:"amount"`     // 수량
 	Timestamp time.Time   `json:"timestamp"`  // 주문 생성 시간
