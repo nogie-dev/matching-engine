@@ -2,7 +2,7 @@ package testdata
 
 import "github.com/nogie-dev/clob-trading/internal/models"
 
-var SampleOrders = []models.RequestOrder{
+var SampleOrders = []models.CreateOrderRequest{
 	// Bids
 	{
 		Ticker:    "BTC-USD",

@@ -8,7 +8,7 @@ import (
 	"github.com/nogie-dev/clob-trading/internal/models"
 )
 
-func GenerateOrderID(req models.RequestOrder) string {
+func GenerateOrderID(req models.CreateOrderRequest) string {
 	payload := fmt.Sprintf("%s|%s|%s|%s|%d",
 		req.Ticker, req.UserID, req.OrderType, req.Position, req.Nonce)
 	sum := sha256.Sum256([]byte(payload))

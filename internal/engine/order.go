@@ -43,7 +43,7 @@ func (ob *OrderBook) side(order *models.BookOrder) (map[float64]*util.PriceLevel
 	}
 }
 
-func CreateOrder(req models.RequestOrder) models.BookOrder {
+func CreateOrder(req models.CreateOrderRequest) models.BookOrder {
 	return models.BookOrder{
 		OrderID:   util.GenerateOrderID(req),
 		Ticker:    req.Ticker,
@@ -144,7 +144,7 @@ func (ob *OrderBook) removeElement(lvl *util.PriceLevel, levels map[float64]*uti
 	}
 }
 
-func (ob *OrderBook) EditOrder(req models.EditRequest) {
+func (ob *OrderBook) EditOrder(req models.EditOrderRequest) {
 	// 요청은 DTO 기준으로 처리하고, 실제 저장된 주문 객체를 수정한다.
 	elem, ok := ob.Index[req.OrderID]
 	if !ok || elem == nil {
