@@ -211,3 +211,14 @@ func (ob *OrderBook) PrintOrderBook() {
 		fmt.Printf("ASK price=%.4f total=%.4f\n", lvl.Price, lvl.TotalAmount)
 	}
 }
+
+// dropPriceLevel removes an empty price level from heap and map.
+func (ob *OrderBook) dropPriceLevel(h heap.Interface, levels map[float64]*util.PriceLevel, lvl *util.PriceLevel) {
+	if lvl == nil {
+		return
+	}
+	if lvl.Index >= 0 && lvl.Index < h.Len() {
+		heap.Remove(h, lvl.Index)
+	}
+	delete(levels, lvl.Price)
+}

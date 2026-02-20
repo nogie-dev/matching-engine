@@ -32,6 +32,11 @@ func (oq *Queue) Remove(elem *list.Element) interface{} {
 	return oq.q.Remove(elem)
 }
 
+// Front returns the first element without removing it.
+func (oq *Queue) Front() *list.Element {
+	return oq.q.Front()
+}
+
 func (oq *Queue) Len() int {
 	return oq.q.Len()
 }

@@ -10,10 +10,14 @@ type BookWorker struct {
 }
 
 // NewBookWorker owns one orderbook per ticker and consumes events over its input channel.
-func NewBookWorker(ticker string) *BookWorker {
+// If an orderbook is provided, the worker will reuse it; otherwise a new one is created.
+func NewBookWorker(ticker string, ob *OrderBook) *BookWorker {
+	if ob == nil {
+		ob = NewOrderBook(ticker)
+	}
 	return &BookWorker{
 		ticker:    ticker,
-		OrderBook: NewOrderBook(ticker),
+		OrderBook: ob,
 		in:        make(chan Event, 128),
 	}
 }
