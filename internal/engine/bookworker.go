@@ -1,6 +1,6 @@
 package engine
 
-import "log"
+import "log/slog"
 
 type BookWorker struct {
 	ticker    string
@@ -27,32 +27,42 @@ func (w *BookWorker) Run() {
 	for ev := range w.in {
 		// Basic ticker guard to avoid misroutes.
 		if ev.Ticker != "" && ev.Ticker != w.ticker {
-			log.Printf("mismatched ticker: got %s, worker %s", ev.Ticker, w.ticker)
+			slog.Warn("mismatched ticker", "got", ev.Ticker, "worker", w.ticker)
 			continue
 		}
 
 		switch ev.Type {
 		case NewOrder:
 			if ev.NewOrder == nil {
-				log.Printf("nil NewOrder payload")
+				slog.Warn("nil NewOrder payload", "ticker", w.ticker)
 				continue
 			}
 			order := CreateOrder(*ev.NewOrder)
-			w.OrderBook.AddOrder(&order)
+			originalAmount := order.Amount
+			logOrderReceived(&order)
+			residual := Match(w.OrderBook, &order)
+			if residual != nil {
+				w.OrderBook.AddOrder(residual)
+				reason := "no_match"
+				if residual.Amount < originalAmount {
+					reason = "partial_fill"
+				}
+				logOrderResting(residual, reason)
+			}
 		case CancelOrder:
 			if ev.CancelReq == nil {
-				log.Printf("nil CancelRequest payload")
+				slog.Warn("nil CancelRequest payload", "ticker", w.ticker)
 				continue
 			}
 			w.OrderBook.RemoveOrder(ev.CancelReq.OrderID)
 		case EditOrder:
 			if ev.EditReq == nil {
-				log.Printf("nil EditOrderRequest payload")
+				slog.Warn("nil EditOrderRequest payload", "ticker", w.ticker)
 				continue
 			}
 			w.OrderBook.EditOrder(*ev.EditReq)
 		default:
-			log.Printf("unsupported event type: %v", ev.Type)
+			slog.Warn("unsupported event type", "type", ev.Type)
 		}
 	}
 }

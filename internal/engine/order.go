@@ -4,7 +4,7 @@ import (
 	"container/heap"
 	"container/list"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/nogie-dev/clob-trading/internal/models"
@@ -84,12 +84,12 @@ func (ob *OrderBook) AddOrder(order *models.BookOrder) {
 func (ob *OrderBook) level(order *models.BookOrder) (*util.PriceLevel, map[float64]*util.PriceLevel, heap.Interface, bool) {
 	levels, h, ok := ob.side(order)
 	if !ok {
-		log.Printf("Unsupported position: %v", order.Position)
+		slog.Error("unsupported position", "position", order.Position)
 		return nil, nil, nil, false
 	}
 	lvl, ok := levels[order.Price]
 	if !ok || lvl == nil {
-		log.Printf("Price level not found: price=%.4f", order.Price)
+		slog.Error("price level not found", "price", order.Price)
 		return nil, nil, nil, false
 	}
 	return lvl, levels, h, true
@@ -98,13 +98,13 @@ func (ob *OrderBook) level(order *models.BookOrder) (*util.PriceLevel, map[float
 func (ob *OrderBook) RemoveOrder(orderID string) {
 	elem, ok := ob.Index[orderID]
 	if !ok || elem == nil {
-		log.Printf("Order not found in index: id=%s", orderID)
+		slog.Warn("order not found in index", "orderID", orderID)
 		return
 	}
 
 	current, ok := elem.Value.(*models.BookOrder)
 	if !ok || current == nil {
-		log.Printf("Order type mismatch: id=%s", orderID)
+		slog.Error("order type mismatch", "orderID", orderID)
 		return
 	}
 
@@ -114,6 +114,7 @@ func (ob *OrderBook) RemoveOrder(orderID string) {
 	}
 
 	ob.removeElement(lvl, levels, h, elem, current.Amount)
+	logOrderCancelled(current)
 }
 
 func (ob *OrderBook) removeElement(lvl *util.PriceLevel, levels map[float64]*util.PriceLevel, h heap.Interface, elem *list.Element, fallbackAmount float64) {
@@ -148,13 +149,13 @@ func (ob *OrderBook) EditOrder(req models.EditOrderRequest) {
 	// 요청은 DTO 기준으로 처리하고, 실제 저장된 주문 객체를 수정한다.
 	elem, ok := ob.Index[req.OrderID]
 	if !ok || elem == nil {
-		log.Printf("Order not found: id=%s", req.OrderID)
+		slog.Warn("order not found", "orderID", req.OrderID)
 		return
 	}
 
 	existing, ok := elem.Value.(*models.BookOrder)
 	if !ok || existing == nil {
-		log.Printf("Order type mismatch: id=%s", req.OrderID)
+		slog.Error("order type mismatch", "orderID", req.OrderID)
 		return
 	}
 
@@ -177,6 +178,7 @@ func (ob *OrderBook) EditOrder(req models.EditOrderRequest) {
 		}
 		existing.Timestamp = time.Now()
 		ob.AddOrder(existing)
+		logOrderEdited(existing, "price_changed")
 	case amountChanged:
 		delta := *req.Amount - existing.Amount
 		if delta > 0 {
@@ -185,11 +187,13 @@ func (ob *OrderBook) EditOrder(req models.EditOrderRequest) {
 			existing.Amount = *req.Amount
 			existing.Timestamp = time.Now()
 			ob.AddOrder(existing)
+			logOrderEdited(existing, "amount_increased")
 		} else {
 			// 수량 감소: 위치 유지, 누적만 반영
 			existing.Amount = *req.Amount
 			existing.Timestamp = time.Now()
 			lvl.TotalAmount += delta
+			logOrderEdited(existing, "amount_decreased")
 		}
 	default:
 		// 변경 없음

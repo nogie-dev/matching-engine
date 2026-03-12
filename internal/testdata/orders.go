@@ -11,6 +11,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Bid,
 		Price:     96536.2,
 		Amount:    0.05,
+		Nonce:     1,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -19,6 +20,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Bid,
 		Price:     96535.8,
 		Amount:    0.03,
+		Nonce:     1,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -27,6 +29,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Bid,
 		Price:     96535.0,
 		Amount:    0.07,
+		Nonce:     1,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -35,6 +38,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Bid,
 		Price:     96534.5,
 		Amount:    0.02,
+		Nonce:     1,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -43,6 +47,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Bid,
 		Price:     96533.9,
 		Amount:    0.06,
+		Nonce:     1,
 	},
 
 	// Asks
@@ -53,6 +58,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Ask,
 		Price:     96536.2,
 		Amount:    0.05,
+		Nonce:     1,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -61,6 +67,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Ask,
 		Price:     96537.0,
 		Amount:    0.04,
+		Nonce:     1,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -69,6 +76,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Ask,
 		Price:     96537.8,
 		Amount:    0.03,
+		Nonce:     1,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -77,6 +85,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Ask,
 		Price:     96538.5,
 		Amount:    0.02,
+		Nonce:     1,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -85,6 +94,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Ask,
 		Price:     96538.5,
 		Amount:    1.02,
+		Nonce:     2,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -93,6 +103,7 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Ask,
 		Price:     96538.5,
 		Amount:    4.02,
+		Nonce:     3,
 	},
 	{
 		Ticker:    "BTC-USD",
@@ -101,5 +112,6 @@ var SampleOrders = []models.CreateOrderRequest{
 		Position:  models.Ask,
 		Price:     96539.3,
 		Amount:    0.06,
+		Nonce:     1,
 	},
 }
