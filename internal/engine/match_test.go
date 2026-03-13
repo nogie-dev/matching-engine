@@ -1,10 +1,17 @@
 package engine
 
 import (
+	"math"
 	"testing"
 
 	"github.com/nogie-dev/clob-trading/internal/models"
 )
+
+const epsilon = 1e-9
+
+func approxEqual(a, b float64) bool {
+	return math.Abs(a-b) < epsilon
+}
 
 // --- 가격 불일치: 체결 없음 ---
 
@@ -165,8 +172,8 @@ func TestMatchMultiLevel_BidSweepsAsks(t *testing.T) {
 		t.Fatal("ask@101 should remain partially")
 	}
 	wantRemain := 0.1
-	if lvl101.TotalAmount != wantRemain {
-		t.Fatalf("ask@101 remaining want %v, got %v", wantRemain, lvl101.TotalAmount)
+	if !approxEqual(lvl101.TotalAmount, wantRemain) {
+		t.Fatalf("remaining want %v, got %v", wantRemain, lvl101.TotalAmount)
 	}
 	if _, ok := ob.Asks[102]; !ok {
 		t.Fatal("ask@102 should be untouched")
@@ -195,8 +202,8 @@ func TestMatchMultiLevel_AskSweepsBids(t *testing.T) {
 		t.Fatal("bid@101 should remain partially")
 	}
 	wantRemain := 0.1
-	if lvl101.TotalAmount != wantRemain {
-		t.Fatalf("bid@101 remaining want %v, got %v", wantRemain, lvl101.TotalAmount)
+	if !approxEqual(lvl101.TotalAmount, wantRemain) {
+		t.Fatalf("remaining want %v, got %v", wantRemain, lvl101.TotalAmount)
 	}
 	if _, ok := ob.Bids[100]; !ok {
 		t.Fatal("bid@100 should be untouched")

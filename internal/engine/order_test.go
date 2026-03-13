@@ -95,7 +95,10 @@ func TestEditOrderPriceChangeMovesLevel(t *testing.T) {
 	ob.AddOrder(o1)
 
 	req := models.EditOrderRequest{OrderID: "1", Position: models.Bid, Price: 101}
-	ob.EditOrder(req)
+	updated := ob.EditOrder(req)
+	if updated != nil {
+		ob.AddOrder(updated)
+	}
 
 	// 호가 변경 시 주문이 호가 간 이동을 하는가
 	if _, ok := ob.Bids[100]; ok {
