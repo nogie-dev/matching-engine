@@ -145,41 +145,40 @@ func (ob *OrderBook) removeElement(lvl *util.PriceLevel, levels map[float64]*uti
 	}
 }
 
-func (ob *OrderBook) EditOrder(req models.EditOrderRequest) {
-	// 요청은 DTO 기준으로 처리하고, 실제 저장된 주문 객체를 수정한다.
+func (ob *OrderBook) EditOrder(req models.EditOrderRequest) *models.BookOrder {
 	elem, ok := ob.Index[req.OrderID]
 	if !ok || elem == nil {
 		slog.Warn("order not found", "orderID", req.OrderID)
-		return
+		return nil
 	}
 
 	existing, ok := elem.Value.(*models.BookOrder)
 	if !ok || existing == nil {
 		slog.Error("order type mismatch", "orderID", req.OrderID)
-		return
+		return nil
 	}
 
-	// 현재 레벨은 기존 주문 가격 기준으로 찾는다.
 	lvl, levels, h, ok := ob.level(&models.BookOrder{Position: existing.Position, Price: existing.Price})
 	if !ok {
-		return
+		return nil
 	}
 
 	priceChanged := existing.Price != req.Price
 	amountChanged := req.Amount != nil && *req.Amount != existing.Amount
 
-	switch {
-	case priceChanged:
-		// 기존 레벨에서 제거 후 새 레벨로 재삽입
+	if priceChanged {
+		// 기존 레벨에서 제거, 업데이트된 주문 반환 (매칭은 bookworker에서)
 		ob.removeElement(lvl, levels, h, elem, existing.Amount)
 		existing.Price = req.Price
 		if req.Amount != nil {
 			existing.Amount = *req.Amount
 		}
 		existing.Timestamp = time.Now()
-		ob.AddOrder(existing)
 		logOrderEdited(existing, "price_changed")
-	case amountChanged:
+		return existing
+	}
+
+	if amountChanged {
 		delta := *req.Amount - existing.Amount
 		if delta > 0 {
 			// 수량 증가: 우선순위 리셋을 위해 제거 후 재삽입
@@ -195,9 +194,9 @@ func (ob *OrderBook) EditOrder(req models.EditOrderRequest) {
 			lvl.TotalAmount += delta
 			logOrderEdited(existing, "amount_decreased")
 		}
-	default:
-		// 변경 없음
 	}
+
+	return nil
 }
 
 func (ob *OrderBook) PrintOrderBook() {

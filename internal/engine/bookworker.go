@@ -60,7 +60,19 @@ func (w *BookWorker) Run() {
 				slog.Warn("nil EditOrderRequest payload", "ticker", w.ticker)
 				continue
 			}
-			w.OrderBook.EditOrder(*ev.EditReq)
+			updated := w.OrderBook.EditOrder(*ev.EditReq)
+			if updated != nil {
+				originalAmount := updated.Amount
+				residual := Match(w.OrderBook, updated)
+				if residual != nil {
+					w.OrderBook.AddOrder(residual)
+					reason := "no_match"
+					if residual.Amount < originalAmount {
+						reason = "partial_fill"
+					}
+					logOrderResting(residual, reason)
+				}
+			}
 		default:
 			slog.Warn("unsupported event type", "type", ev.Type)
 		}
