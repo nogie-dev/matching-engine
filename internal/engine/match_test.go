@@ -258,3 +258,61 @@ func TestMatchTimePriority_FIFO(t *testing.T) {
 		t.Fatalf("second order should be untouched, got amount %v", second.Amount)
 	}
 }
+
+// --- Index 정합성 ---
+
+// 전량 체결된 maker 주문은 더 이상 resting order가 아니므로 Index에서도 제거되어야 한다.
+func TestMatchFullFillRemovesMakerFromIndex(t *testing.T) {
+	ob := NewOrderBook("BTC-USD")
+	maker := newOrder("ask-1", models.Ask, 100, 1.0)
+	ob.AddOrder(maker)
+
+	taker := newOrder("bid-1", models.Bid, 100, 1.0)
+	residual := Match(ob, taker)
+
+	if residual != nil {
+		t.Fatalf("expected taker full fill, got residual amount %v", residual.Amount)
+	}
+	if _, ok := ob.Index[maker.OrderID]; ok {
+		t.Fatalf("fully filled maker %q should be removed from index", maker.OrderID)
+	}
+}
+
+// 부분 체결되어 잔량이 남은 maker 주문은 여전히 resting order이므로 Index에 남아야 한다.
+func TestMatchPartialFillKeepsMakerInIndex(t *testing.T) {
+	ob := NewOrderBook("BTC-USD")
+	maker := newOrder("ask-1", models.Ask, 100, 1.0)
+	ob.AddOrder(maker)
+
+	taker := newOrder("bid-1", models.Bid, 100, 0.4)
+	residual := Match(ob, taker)
+
+	if residual != nil {
+		t.Fatalf("expected taker full fill, got residual amount %v", residual.Amount)
+	}
+	if _, ok := ob.Index[maker.OrderID]; !ok {
+		t.Fatalf("partially filled maker %q should remain in index", maker.OrderID)
+	}
+}
+
+// 전량 체결된 maker 주문에 대한 후속 취소 요청은 stale index를 남기거나 book 상태를 깨뜨리면 안 된다.
+func TestCancelAfterMakerFullFillDoesNotCorruptBook(t *testing.T) {
+	ob := NewOrderBook("BTC-USD")
+	maker := newOrder("ask-1", models.Ask, 100, 1.0)
+	ob.AddOrder(maker)
+
+	taker := newOrder("bid-1", models.Bid, 100, 1.0)
+	Match(ob, taker)
+
+	ob.RemoveOrder(maker.OrderID)
+
+	if _, ok := ob.Index[maker.OrderID]; ok {
+		t.Fatalf("fully filled maker %q should not remain in index after cancel attempt", maker.OrderID)
+	}
+	if len(ob.Asks) != 0 {
+		t.Fatalf("ask book should remain empty, got %d levels", len(ob.Asks))
+	}
+	if ob.askLevels.Len() != 0 {
+		t.Fatalf("ask heap should remain empty, got len %d", ob.askLevels.Len())
+	}
+}

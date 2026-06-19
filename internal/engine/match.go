@@ -41,6 +41,7 @@ func Match(book *OrderBook, incoming *models.BookOrder) *models.BookOrder {
 
 			if target.Amount <= 0 {
 				bestAsk.Queue.Remove(elem)
+				delete(book.Index, target.OrderID)
 			}
 			if bestAsk.Queue.Len() == 0 {
 				book.dropPriceLevel(&book.askLevels, book.Asks, bestAsk)
@@ -71,6 +72,7 @@ func Match(book *OrderBook, incoming *models.BookOrder) *models.BookOrder {
 
 			if target.Amount <= 0 {
 				bestBid.Queue.Remove(elem)
+				delete(book.Index, target.OrderID)
 			}
 			if bestBid.Queue.Len() == 0 {
 				book.dropPriceLevel(&book.bidLevels, book.Bids, bestBid)
