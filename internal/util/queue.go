@@ -12,8 +12,8 @@ func NewQueue() *Queue {
 	return &Queue{list.New()}
 }
 
-func (oq *Queue) Push(order interface{}) {
-	oq.q.PushBack(order)
+func (oq *Queue) Push(order interface{}) *list.Element {
+	return oq.q.PushBack(order)
 }
 
 func (oq *Queue) Pop() interface{} {
@@ -23,6 +23,18 @@ func (oq *Queue) Pop() interface{} {
 	}
 
 	return oq.q.Remove(front)
+}
+
+func (oq *Queue) Remove(elem *list.Element) interface{} {
+	if elem == nil {
+		return nil
+	}
+	return oq.q.Remove(elem)
+}
+
+// Front returns the first element without removing it.
+func (oq *Queue) Front() *list.Element {
+	return oq.q.Front()
 }
 
 func (oq *Queue) Len() int {
