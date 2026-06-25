@@ -37,6 +37,14 @@ func (w *BookWorker) Run() {
 				slog.Warn("nil NewOrder payload", "ticker", w.ticker)
 				continue
 			}
+			if ev.NewOrder.Ticker != w.ticker {
+				slog.Warn("mismatched NewOrder payload ticker",
+					"eventTicker", ev.Ticker,
+					"payloadTicker", ev.NewOrder.Ticker,
+					"worker", w.ticker,
+				)
+				continue
+			}
 			order := CreateOrder(*ev.NewOrder)
 			originalAmount := order.Amount
 			logOrderReceived(&order)
@@ -54,10 +62,28 @@ func (w *BookWorker) Run() {
 				slog.Warn("nil CancelRequest payload", "ticker", w.ticker)
 				continue
 			}
+			if ev.CancelReq.Ticker != w.ticker {
+				slog.Warn("mismatched CancelOrder payload ticker",
+					"eventTicker", ev.Ticker,
+					"payloadTicker", ev.CancelReq.Ticker,
+					"worker", w.ticker,
+					"orderID", ev.CancelReq.OrderID,
+				)
+				continue
+			}
 			w.OrderBook.RemoveOrder(ev.CancelReq.OrderID)
 		case EditOrder:
 			if ev.EditReq == nil {
 				slog.Warn("nil EditOrderRequest payload", "ticker", w.ticker)
+				continue
+			}
+			if ev.EditReq.Ticker != w.ticker {
+				slog.Warn("mismatched EditOrder payload ticker",
+					"eventTicker", ev.Ticker,
+					"payloadTicker", ev.EditReq.Ticker,
+					"worker", w.ticker,
+					"orderID", ev.EditReq.OrderID,
+				)
 				continue
 			}
 			updated := w.OrderBook.EditOrder(*ev.EditReq)

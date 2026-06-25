@@ -9,10 +9,10 @@ type CancelOrderRequest struct {
 // EditOrderRequest describes an order modification.
 // Amount is optional; nil means no change.
 type EditOrderRequest struct {
-	OrderID  string   `json:"order_id"`
-	Position Position `json:"position"`
-	Price    float64  `json:"price"`
-	Amount   *float64 `json:"amount"`
+	Ticker  string   `json:"ticker"`
+	OrderID string   `json:"order_id"`
+	Price   float64  `json:"price"`
+	Amount  *float64 `json:"amount"`
 }
 
 // CreateOrderRequest is the incoming order DTO for new orders.

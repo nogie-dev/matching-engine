@@ -57,7 +57,7 @@ func TestEditOrderAmountIncreaseMovesToBack(t *testing.T) {
 
 	// "1" 의 주문 수량 증가
 	newAmt := 2.0
-	req := models.EditOrderRequest{OrderID: "1", Position: models.Bid, Price: 100, Amount: &newAmt}
+	req := models.EditOrderRequest{OrderID: "1", Price: 100, Amount: &newAmt}
 	ob.EditOrder(req)
 
 	lvl, ok := ob.Bids[100]
@@ -94,7 +94,7 @@ func TestEditOrderPriceChangeMovesLevel(t *testing.T) {
 	o1 := newOrder("1", models.Bid, 100, 1)
 	ob.AddOrder(o1)
 
-	req := models.EditOrderRequest{OrderID: "1", Position: models.Bid, Price: 101}
+	req := models.EditOrderRequest{OrderID: "1", Price: 101}
 	updated := ob.EditOrder(req)
 	if updated != nil {
 		ob.AddOrder(updated)
@@ -122,7 +122,7 @@ func TestEditOrderAmountDecreaseKeepsOrder(t *testing.T) {
 
 	// 주문 수량 감소
 	newAmt := 1.0
-	req := models.EditOrderRequest{OrderID: "1", Position: models.Bid, Price: 100, Amount: &newAmt}
+	req := models.EditOrderRequest{OrderID: "1", Price: 100, Amount: &newAmt}
 	ob.EditOrder(req)
 
 	lvl, ok := ob.Bids[100]
