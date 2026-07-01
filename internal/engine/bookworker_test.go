@@ -1,11 +1,26 @@
 package engine
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/nogie-dev/clob-trading/internal/matchlog"
 	"github.com/nogie-dev/clob-trading/internal/models"
 )
+
+type fakeMatchLogStore struct {
+	logs []matchlog.MatchLog
+}
+
+func (f *fakeMatchLogStore) SaveMatchLog(ctx context.Context, log matchlog.MatchLog) error {
+	return f.SaveMatchLogs(ctx, []matchlog.MatchLog{log})
+}
+
+func (f *fakeMatchLogStore) SaveMatchLogs(_ context.Context, logs []matchlog.MatchLog) error {
+	f.logs = append(f.logs, logs...)
+	return nil
+}
 
 func routeAndDrain(t *testing.T, router *Router, worker *BookWorker, ev Event) {
 	t.Helper()
@@ -57,6 +72,40 @@ func TestBookWorkerRejectsNewOrderPayloadTickerMismatch(t *testing.T) {
 	}
 	if len(worker.OrderBook.Index) != 0 {
 		t.Fatalf("mismatched NewOrder payload should not index orders, got %d entries", len(worker.OrderBook.Index))
+	}
+}
+
+func TestBookWorkerForwardsMatchLogsToStore(t *testing.T) {
+	store := &fakeMatchLogStore{}
+	worker := NewBookWorkerWithMatchLogStore("BTC-USD", nil, store)
+	maker := newOrder("ask-1", models.Ask, 100, 0.5)
+	maker.UserID = "maker-user"
+	worker.OrderBook.AddOrder(maker)
+
+	router := NewRouter()
+	if err := router.Register("BTC-USD", worker); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	routeAndDrain(t, router, worker, Event{
+		Type:   NewOrder,
+		Ticker: "BTC-USD",
+		NewOrder: &models.CreateOrderRequest{
+			Ticker:    "BTC-USD",
+			UserID:    "taker-user",
+			OrderType: models.Limit,
+			Position:  models.Bid,
+			Price:     101,
+			Amount:    0.25,
+			Nonce:     1,
+		},
+	})
+
+	if len(store.logs) != 1 {
+		t.Fatalf("stored match logs want 1, got %d", len(store.logs))
+	}
+	if store.logs[0].MakerOrderID != "ask-1" || store.logs[0].TakerUserID != "taker-user" {
+		t.Fatalf("unexpected stored match log: %#v", store.logs[0])
 	}
 }
 

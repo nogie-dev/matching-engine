@@ -21,13 +21,13 @@ func TestMatchNoMatch_BidBelowAsk(t *testing.T) {
 	ob.AddOrder(newOrder("ask-1", models.Ask, 101, 1.0))
 
 	taker := newOrder("bid-1", models.Bid, 100, 1.0)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual == nil {
+	if result.Residual == nil {
 		t.Fatal("expected no match, got full fill")
 	}
-	if residual.Amount != 1.0 {
-		t.Fatalf("residual amount want 1.0, got %v", residual.Amount)
+	if result.Residual.Amount != 1.0 {
+		t.Fatalf("result.Residual amount want 1.0, got %v", result.Residual.Amount)
 	}
 	if _, ok := ob.Asks[101]; !ok {
 		t.Fatal("ask level should remain on book")
@@ -40,13 +40,13 @@ func TestMatchNoMatch_AskAboveBid(t *testing.T) {
 	ob.AddOrder(newOrder("bid-1", models.Bid, 100, 1.0))
 
 	taker := newOrder("ask-1", models.Ask, 101, 1.0)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual == nil {
+	if result.Residual == nil {
 		t.Fatal("expected no match, got full fill")
 	}
-	if residual.Amount != 1.0 {
-		t.Fatalf("residual amount want 1.0, got %v", residual.Amount)
+	if result.Residual.Amount != 1.0 {
+		t.Fatalf("result.Residual amount want 1.0, got %v", result.Residual.Amount)
 	}
 	if _, ok := ob.Bids[100]; !ok {
 		t.Fatal("bid level should remain on book")
@@ -62,10 +62,10 @@ func TestMatchFullFill_BidTaker(t *testing.T) {
 	ob.AddOrder(maker)
 
 	taker := newOrder("bid-1", models.Bid, 100, 1.0)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual != nil {
-		t.Fatalf("expected full fill, got residual amount %v", residual.Amount)
+	if result.Residual != nil {
+		t.Fatalf("expected full fill, got result.Residual amount %v", result.Residual.Amount)
 	}
 	if maker.Amount != 0 {
 		t.Fatalf("maker should be fully filled, got %v", maker.Amount)
@@ -82,10 +82,10 @@ func TestMatchFullFill_AskTaker(t *testing.T) {
 	ob.AddOrder(maker)
 
 	taker := newOrder("ask-1", models.Ask, 100, 1.0)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual != nil {
-		t.Fatalf("expected full fill, got residual amount %v", residual.Amount)
+	if result.Residual != nil {
+		t.Fatalf("expected full fill, got result.Residual amount %v", result.Residual.Amount)
 	}
 	if maker.Amount != 0 {
 		t.Fatalf("maker should be fully filled, got %v", maker.Amount)
@@ -104,14 +104,14 @@ func TestMatchPartialFill_TakerLarger(t *testing.T) {
 	ob.AddOrder(maker)
 
 	taker := newOrder("bid-1", models.Bid, 100, 1.0)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual == nil {
-		t.Fatal("expected partial fill residual, got nil")
+	if result.Residual == nil {
+		t.Fatal("expected partial fill result.Residual, got nil")
 	}
 	wantResidual := 0.7
-	if residual.Amount != wantResidual {
-		t.Fatalf("residual amount want %v, got %v", wantResidual, residual.Amount)
+	if result.Residual.Amount != wantResidual {
+		t.Fatalf("result.Residual amount want %v, got %v", wantResidual, result.Residual.Amount)
 	}
 	if maker.Amount != 0 {
 		t.Fatalf("maker should be fully consumed, got %v", maker.Amount)
@@ -130,10 +130,10 @@ func TestMatchPartialFill_MakerLarger(t *testing.T) {
 	ob.AddOrder(maker)
 
 	taker := newOrder("bid-1", models.Bid, 100, 0.4)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual != nil {
-		t.Fatalf("taker should be fully filled, got residual %v", residual.Amount)
+	if result.Residual != nil {
+		t.Fatalf("taker should be fully filled, got result.Residual %v", result.Residual.Amount)
 	}
 	wantMakerRemain := 0.6
 	if maker.Amount != wantMakerRemain {
@@ -159,10 +159,10 @@ func TestMatchMultiLevel_BidSweepsAsks(t *testing.T) {
 
 	// 101까지만 커버하는 BID
 	taker := newOrder("bid-1", models.Bid, 101, 0.5)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual != nil {
-		t.Fatalf("taker should be fully filled, got residual %v", residual.Amount)
+	if result.Residual != nil {
+		t.Fatalf("taker should be fully filled, got result.Residual %v", result.Residual.Amount)
 	}
 	if _, ok := ob.Asks[100]; ok {
 		t.Fatal("ask@100 should be fully consumed")
@@ -189,10 +189,10 @@ func TestMatchMultiLevel_AskSweepsBids(t *testing.T) {
 
 	// 101까지만 커버하는 ASK
 	taker := newOrder("ask-1", models.Ask, 101, 0.5)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual != nil {
-		t.Fatalf("taker should be fully filled, got residual %v", residual.Amount)
+	if result.Residual != nil {
+		t.Fatalf("taker should be fully filled, got result.Residual %v", result.Residual.Amount)
 	}
 	if _, ok := ob.Bids[102]; ok {
 		t.Fatal("bid@102 should be fully consumed")
@@ -220,10 +220,10 @@ func TestMatchPricePriority(t *testing.T) {
 	ob.AddOrder(newOrder("ask-100", models.Ask, 100, 1.0))
 
 	taker := newOrder("bid-1", models.Bid, 102, 1.0)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual != nil {
-		t.Fatalf("taker should be fully filled, got residual %v", residual.Amount)
+	if result.Residual != nil {
+		t.Fatalf("taker should be fully filled, got result.Residual %v", result.Residual.Amount)
 	}
 	// 100이 먼저 소진돼야 함
 	if _, ok := ob.Asks[100]; ok {
@@ -245,10 +245,10 @@ func TestMatchTimePriority_FIFO(t *testing.T) {
 	ob.AddOrder(second)
 
 	taker := newOrder("bid-1", models.Bid, 100, 0.5)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual != nil {
-		t.Fatalf("taker should be fully filled, got residual %v", residual.Amount)
+	if result.Residual != nil {
+		t.Fatalf("taker should be fully filled, got result.Residual %v", result.Residual.Amount)
 	}
 	// first가 소진되고 second는 그대로
 	if first.Amount != 0 {
@@ -256,6 +256,37 @@ func TestMatchTimePriority_FIFO(t *testing.T) {
 	}
 	if second.Amount != 0.5 {
 		t.Fatalf("second order should be untouched, got amount %v", second.Amount)
+	}
+}
+
+func TestMatchReturnsRawMatchLogs(t *testing.T) {
+	ob := NewOrderBook("BTC-USD")
+	maker := newOrder("ask-1", models.Ask, 100, 0.5)
+	maker.UserID = "maker-user"
+	ob.AddOrder(maker)
+
+	taker := newOrder("bid-1", models.Bid, 101, 0.25)
+	taker.UserID = "taker-user"
+	result := Match(ob, taker)
+
+	if result.Residual != nil {
+		t.Fatalf("taker should be fully filled, got residual %v", result.Residual.Amount)
+	}
+	if len(result.Logs) != 1 {
+		t.Fatalf("match logs want 1, got %d", len(result.Logs))
+	}
+	log := result.Logs[0]
+	if log.Ticker != "BTC-USD" ||
+		log.Price != 100 ||
+		log.Amount != 0.25 ||
+		log.QuoteAmount != 25 ||
+		log.MakerOrderID != "ask-1" ||
+		log.TakerOrderID != "bid-1" ||
+		log.MakerUserID != "maker-user" ||
+		log.TakerUserID != "taker-user" ||
+		log.MakerSide != models.Ask ||
+		log.TakerSide != models.Bid {
+		t.Fatalf("unexpected match log: %#v", log)
 	}
 }
 
@@ -268,10 +299,10 @@ func TestMatchFullFillRemovesMakerFromIndex(t *testing.T) {
 	ob.AddOrder(maker)
 
 	taker := newOrder("bid-1", models.Bid, 100, 1.0)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual != nil {
-		t.Fatalf("expected taker full fill, got residual amount %v", residual.Amount)
+	if result.Residual != nil {
+		t.Fatalf("expected taker full fill, got result.Residual amount %v", result.Residual.Amount)
 	}
 	if _, ok := ob.Index[maker.OrderID]; ok {
 		t.Fatalf("fully filled maker %q should be removed from index", maker.OrderID)
@@ -285,10 +316,10 @@ func TestMatchPartialFillKeepsMakerInIndex(t *testing.T) {
 	ob.AddOrder(maker)
 
 	taker := newOrder("bid-1", models.Bid, 100, 0.4)
-	residual := Match(ob, taker)
+	result := Match(ob, taker)
 
-	if residual != nil {
-		t.Fatalf("expected taker full fill, got residual amount %v", residual.Amount)
+	if result.Residual != nil {
+		t.Fatalf("expected taker full fill, got result.Residual amount %v", result.Residual.Amount)
 	}
 	if _, ok := ob.Index[maker.OrderID]; !ok {
 		t.Fatalf("partially filled maker %q should remain in index", maker.OrderID)
