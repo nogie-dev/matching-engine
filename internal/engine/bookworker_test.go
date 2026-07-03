@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nogie-dev/clob-trading/internal/matchlog"
 	"github.com/nogie-dev/clob-trading/internal/models"
 )
 
@@ -57,6 +58,59 @@ func TestBookWorkerRejectsNewOrderPayloadTickerMismatch(t *testing.T) {
 	}
 	if len(worker.OrderBook.Index) != 0 {
 		t.Fatalf("mismatched NewOrder payload should not index orders, got %d entries", len(worker.OrderBook.Index))
+	}
+}
+
+func TestBookWorkerEmitsMatchLogs(t *testing.T) {
+	logOut := make(chan []matchlog.MatchLog, 1)
+	worker := NewBookWorkerWithOptions("BTC-USD", nil, BookWorkerOptions{
+		MatchLogOut: logOut,
+	})
+	maker := newOrder("ask-1", models.Ask, 100, 0.5)
+	maker.UserID = "maker-user"
+	worker.OrderBook.AddOrder(maker)
+
+	router := NewRouter()
+	if err := router.Register("BTC-USD", worker); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	routeAndDrain(t, router, worker, Event{
+		Type:   NewOrder,
+		Ticker: "BTC-USD",
+		NewOrder: &models.CreateOrderRequest{
+			Ticker:    "BTC-USD",
+			UserID:    "taker-user",
+			OrderType: models.Limit,
+			Position:  models.Bid,
+			Price:     101,
+			Amount:    0.25,
+			Nonce:     1,
+		},
+	})
+
+	var logs []matchlog.MatchLog
+	select {
+	case logs = <-logOut:
+	default:
+		t.Fatal("expected emitted match logs")
+	}
+
+	if len(logs) != 1 {
+		t.Fatalf("emitted match logs want 1, got %d", len(logs))
+	}
+	if logs[0].MakerOrderID != "ask-1" || logs[0].TakerUserID != "taker-user" {
+		t.Fatalf("unexpected emitted match log: %#v", logs[0])
+	}
+}
+
+func TestNewBookWorkerWithOptionsUsesInputBufferSize(t *testing.T) {
+	worker := NewBookWorkerWithOptions("BTC-USD", nil, BookWorkerOptions{
+		InputBufferSize: 3,
+	})
+
+	if cap(worker.in) != 3 {
+		t.Fatalf("worker input channel cap want 3, got %d", cap(worker.in))
 	}
 }
 

@@ -1,24 +1,44 @@
 package engine
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"github.com/nogie-dev/clob-trading/internal/matchlog"
+)
+
+const DefaultWorkerInputBufferSize = 128
+
+type BookWorkerOptions struct {
+	InputBufferSize int
+	MatchLogOut     chan<- []matchlog.MatchLog
+}
 
 type BookWorker struct {
-	ticker    string
-	OrderBook *OrderBook
-	in        chan Event
-	// out       chan TradeEvent
+	ticker      string
+	OrderBook   *OrderBook
+	in          chan Event
+	matchLogOut chan<- []matchlog.MatchLog
 }
 
 // NewBookWorker owns one orderbook per ticker and consumes events over its input channel.
 // If an orderbook is provided, the worker will reuse it; otherwise a new one is created.
 func NewBookWorker(ticker string, ob *OrderBook) *BookWorker {
+	return NewBookWorkerWithOptions(ticker, ob, BookWorkerOptions{})
+}
+
+func NewBookWorkerWithOptions(ticker string, ob *OrderBook, opts BookWorkerOptions) *BookWorker {
 	if ob == nil {
 		ob = NewOrderBook(ticker)
 	}
+	bufferSize := opts.InputBufferSize
+	if bufferSize <= 0 {
+		bufferSize = DefaultWorkerInputBufferSize
+	}
 	return &BookWorker{
-		ticker:    ticker,
-		OrderBook: ob,
-		in:        make(chan Event, 128),
+		ticker:      ticker,
+		OrderBook:   ob,
+		in:          make(chan Event, bufferSize),
+		matchLogOut: opts.MatchLogOut,
 	}
 }
 
@@ -48,14 +68,15 @@ func (w *BookWorker) Run() {
 			order := CreateOrder(*ev.NewOrder)
 			originalAmount := order.Amount
 			logOrderReceived(&order)
-			residual := Match(w.OrderBook, &order)
-			if residual != nil {
-				w.OrderBook.AddOrder(residual)
+			result := Match(w.OrderBook, &order)
+			w.emitMatchLogs(result.Logs)
+			if result.Residual != nil {
+				w.OrderBook.AddOrder(result.Residual)
 				reason := "no_match"
-				if residual.Amount < originalAmount {
+				if result.Residual.Amount < originalAmount {
 					reason = "partial_fill"
 				}
-				logOrderResting(residual, reason)
+				logOrderResting(result.Residual, reason)
 			}
 		case CancelOrder:
 			if ev.CancelReq == nil {
@@ -89,18 +110,26 @@ func (w *BookWorker) Run() {
 			updated := w.OrderBook.EditOrder(*ev.EditReq)
 			if updated != nil {
 				originalAmount := updated.Amount
-				residual := Match(w.OrderBook, updated)
-				if residual != nil {
-					w.OrderBook.AddOrder(residual)
+				result := Match(w.OrderBook, updated)
+				w.emitMatchLogs(result.Logs)
+				if result.Residual != nil {
+					w.OrderBook.AddOrder(result.Residual)
 					reason := "no_match"
-					if residual.Amount < originalAmount {
+					if result.Residual.Amount < originalAmount {
 						reason = "partial_fill"
 					}
-					logOrderResting(residual, reason)
+					logOrderResting(result.Residual, reason)
 				}
 			}
 		default:
 			slog.Warn("unsupported event type", "type", ev.Type)
 		}
 	}
+}
+
+func (w *BookWorker) emitMatchLogs(logs []matchlog.MatchLog) {
+	if len(logs) == 0 || w.matchLogOut == nil {
+		return
+	}
+	w.matchLogOut <- logs
 }
