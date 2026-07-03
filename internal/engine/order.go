@@ -202,16 +202,20 @@ func (ob *OrderBook) EditOrder(req models.EditOrderRequest) *models.BookOrder {
 func (ob *OrderBook) PrintOrderBook() {
 	bidHeap := append(util.MaxPriceHeap(nil), ob.bidLevels...)
 	heap.Init(&bidHeap)
+	bidCumulative := 0.0
 	for bidHeap.Len() > 0 {
 		lvl := heap.Pop(&bidHeap).(*util.PriceLevel)
-		fmt.Printf("BID price=%.4f total=%.4f\n", lvl.Price, lvl.TotalAmount)
+		bidCumulative += lvl.TotalAmount
+		fmt.Printf("BID price=%.4f total=%.4f cumulative=%.4f\n", lvl.Price, lvl.TotalAmount, bidCumulative)
 	}
 
 	askHeap := append(util.MinPriceHeap(nil), ob.askLevels...)
 	heap.Init(&askHeap)
+	askCumulative := 0.0
 	for askHeap.Len() > 0 {
 		lvl := heap.Pop(&askHeap).(*util.PriceLevel)
-		fmt.Printf("ASK price=%.4f total=%.4f\n", lvl.Price, lvl.TotalAmount)
+		askCumulative += lvl.TotalAmount
+		fmt.Printf("ASK price=%.4f total=%.4f cumulative=%.4f\n", lvl.Price, lvl.TotalAmount, askCumulative)
 	}
 }
 

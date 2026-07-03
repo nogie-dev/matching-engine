@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"io"
+	"os"
 	"testing"
 
 	"github.com/nogie-dev/clob-trading/internal/models"
@@ -147,4 +149,44 @@ func TestEditOrderAmountDecreaseKeepsOrder(t *testing.T) {
 			t.Fatalf("order sequence mismatch: got %v want %v", ids, want)
 		}
 	}
+}
+
+func TestPrintOrderBookIncludesCumulativeAmount(t *testing.T) {
+	ob := NewOrderBook("BTC-USD")
+	ob.AddOrder(newOrder("bid-1", models.Bid, 100, 1))
+	ob.AddOrder(newOrder("bid-2", models.Bid, 99, 2))
+	ob.AddOrder(newOrder("ask-1", models.Ask, 101, 3))
+	ob.AddOrder(newOrder("ask-2", models.Ask, 102, 4))
+
+	out := captureStdout(t, ob.PrintOrderBook)
+	want := "BID price=100.0000 total=1.0000 cumulative=1.0000\n" +
+		"BID price=99.0000 total=2.0000 cumulative=3.0000\n" +
+		"ASK price=101.0000 total=3.0000 cumulative=3.0000\n" +
+		"ASK price=102.0000 total=4.0000 cumulative=7.0000\n"
+	if out != want {
+		t.Fatalf("PrintOrderBook output mismatch:\ngot:\n%swant:\n%s", out, want)
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = old })
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close stdout writer: %v", err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	return string(out)
 }
