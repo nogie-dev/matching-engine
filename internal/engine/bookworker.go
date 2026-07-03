@@ -1,34 +1,44 @@
 package engine
 
 import (
-	"context"
 	"log/slog"
 
 	"github.com/nogie-dev/clob-trading/internal/matchlog"
 )
 
+const DefaultWorkerInputBufferSize = 128
+
+type BookWorkerOptions struct {
+	InputBufferSize int
+	MatchLogOut     chan<- []matchlog.MatchLog
+}
+
 type BookWorker struct {
-	ticker        string
-	OrderBook     *OrderBook
-	in            chan Event
-	matchLogStore matchlog.Store
+	ticker      string
+	OrderBook   *OrderBook
+	in          chan Event
+	matchLogOut chan<- []matchlog.MatchLog
 }
 
 // NewBookWorker owns one orderbook per ticker and consumes events over its input channel.
 // If an orderbook is provided, the worker will reuse it; otherwise a new one is created.
 func NewBookWorker(ticker string, ob *OrderBook) *BookWorker {
-	return NewBookWorkerWithMatchLogStore(ticker, ob, nil)
+	return NewBookWorkerWithOptions(ticker, ob, BookWorkerOptions{})
 }
 
-func NewBookWorkerWithMatchLogStore(ticker string, ob *OrderBook, store matchlog.Store) *BookWorker {
+func NewBookWorkerWithOptions(ticker string, ob *OrderBook, opts BookWorkerOptions) *BookWorker {
 	if ob == nil {
 		ob = NewOrderBook(ticker)
 	}
+	bufferSize := opts.InputBufferSize
+	if bufferSize <= 0 {
+		bufferSize = DefaultWorkerInputBufferSize
+	}
 	return &BookWorker{
-		ticker:        ticker,
-		OrderBook:     ob,
-		in:            make(chan Event, 128),
-		matchLogStore: store,
+		ticker:      ticker,
+		OrderBook:   ob,
+		in:          make(chan Event, bufferSize),
+		matchLogOut: opts.MatchLogOut,
 	}
 }
 
@@ -59,7 +69,7 @@ func (w *BookWorker) Run() {
 			originalAmount := order.Amount
 			logOrderReceived(&order)
 			result := Match(w.OrderBook, &order)
-			w.saveMatchLogs(result.Logs)
+			w.emitMatchLogs(result.Logs)
 			if result.Residual != nil {
 				w.OrderBook.AddOrder(result.Residual)
 				reason := "no_match"
@@ -101,7 +111,7 @@ func (w *BookWorker) Run() {
 			if updated != nil {
 				originalAmount := updated.Amount
 				result := Match(w.OrderBook, updated)
-				w.saveMatchLogs(result.Logs)
+				w.emitMatchLogs(result.Logs)
 				if result.Residual != nil {
 					w.OrderBook.AddOrder(result.Residual)
 					reason := "no_match"
@@ -117,12 +127,9 @@ func (w *BookWorker) Run() {
 	}
 }
 
-func (w *BookWorker) saveMatchLogs(logs []matchlog.MatchLog) {
-	if len(logs) == 0 || w.matchLogStore == nil {
+func (w *BookWorker) emitMatchLogs(logs []matchlog.MatchLog) {
+	if len(logs) == 0 || w.matchLogOut == nil {
 		return
 	}
-	if err := w.matchLogStore.SaveMatchLogs(context.Background(), logs); err != nil {
-		// ponytail: durability policy is unresolved; decide retry/backpressure/drop before production use.
-		slog.Error("match log store failed", "ticker", w.ticker, "error", err)
-	}
+	w.matchLogOut <- logs
 }

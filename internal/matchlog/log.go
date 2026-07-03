@@ -7,6 +7,8 @@ import (
 	"github.com/nogie-dev/clob-trading/internal/models"
 )
 
+const DefaultOutputBufferSize = 128
+
 // MatchLog is the raw append-only execution event emitted by the matching engine.
 type MatchLog struct {
 	Ticker       string

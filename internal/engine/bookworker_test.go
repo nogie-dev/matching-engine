@@ -1,26 +1,12 @@
 package engine
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/nogie-dev/clob-trading/internal/matchlog"
 	"github.com/nogie-dev/clob-trading/internal/models"
 )
-
-type fakeMatchLogStore struct {
-	logs []matchlog.MatchLog
-}
-
-func (f *fakeMatchLogStore) SaveMatchLog(ctx context.Context, log matchlog.MatchLog) error {
-	return f.SaveMatchLogs(ctx, []matchlog.MatchLog{log})
-}
-
-func (f *fakeMatchLogStore) SaveMatchLogs(_ context.Context, logs []matchlog.MatchLog) error {
-	f.logs = append(f.logs, logs...)
-	return nil
-}
 
 func routeAndDrain(t *testing.T, router *Router, worker *BookWorker, ev Event) {
 	t.Helper()
@@ -75,9 +61,11 @@ func TestBookWorkerRejectsNewOrderPayloadTickerMismatch(t *testing.T) {
 	}
 }
 
-func TestBookWorkerForwardsMatchLogsToStore(t *testing.T) {
-	store := &fakeMatchLogStore{}
-	worker := NewBookWorkerWithMatchLogStore("BTC-USD", nil, store)
+func TestBookWorkerEmitsMatchLogs(t *testing.T) {
+	logOut := make(chan []matchlog.MatchLog, 1)
+	worker := NewBookWorkerWithOptions("BTC-USD", nil, BookWorkerOptions{
+		MatchLogOut: logOut,
+	})
 	maker := newOrder("ask-1", models.Ask, 100, 0.5)
 	maker.UserID = "maker-user"
 	worker.OrderBook.AddOrder(maker)
@@ -101,11 +89,28 @@ func TestBookWorkerForwardsMatchLogsToStore(t *testing.T) {
 		},
 	})
 
-	if len(store.logs) != 1 {
-		t.Fatalf("stored match logs want 1, got %d", len(store.logs))
+	var logs []matchlog.MatchLog
+	select {
+	case logs = <-logOut:
+	default:
+		t.Fatal("expected emitted match logs")
 	}
-	if store.logs[0].MakerOrderID != "ask-1" || store.logs[0].TakerUserID != "taker-user" {
-		t.Fatalf("unexpected stored match log: %#v", store.logs[0])
+
+	if len(logs) != 1 {
+		t.Fatalf("emitted match logs want 1, got %d", len(logs))
+	}
+	if logs[0].MakerOrderID != "ask-1" || logs[0].TakerUserID != "taker-user" {
+		t.Fatalf("unexpected emitted match log: %#v", logs[0])
+	}
+}
+
+func TestNewBookWorkerWithOptionsUsesInputBufferSize(t *testing.T) {
+	worker := NewBookWorkerWithOptions("BTC-USD", nil, BookWorkerOptions{
+		InputBufferSize: 3,
+	})
+
+	if cap(worker.in) != 3 {
+		t.Fatalf("worker input channel cap want 3, got %d", cap(worker.in))
 	}
 }
 

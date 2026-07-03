@@ -13,13 +13,14 @@ Responsibilities:
 - `Router.OrderRouter` validates ticker presence, finds the worker, and sends the event.
 - `BookWorker` validates payload ticker consistency and handles event types.
 - Matching, cancel, and edit behavior belong in `BookWorker` and `OrderBook`, not `Router`.
-- `BookWorker` may forward `MatchResult.Logs` to a `matchlog.Store`.
+- `BookWorker` may emit `MatchResult.Logs` to a match log output channel.
 
 Current behavior:
 
 - Unknown ticker returns an error.
 - Empty ticker returns an error.
-- Worker input channel is buffered with size 128.
+- Worker input channel defaults to buffer size 128 and can be changed through
+  `engine.worker_input_buffer_size` in `config/default.json`.
 - Sending to a full worker channel blocks.
 - Mismatched payload ticker is logged and skipped by the worker.
 - Match log durability policy is not decided yet.
