@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"time"
 
 	"github.com/nogie-dev/clob-trading/internal/config"
 	"github.com/nogie-dev/clob-trading/internal/engine"
@@ -39,8 +38,4 @@ func main() {
 			log.Printf("route error: %v", err)
 		}
 	}
-
-	// Give the worker a moment to drain the channel before printing.
-	time.Sleep(50 * time.Millisecond)
-	w.OrderBook.PrintOrderBook()
 }
