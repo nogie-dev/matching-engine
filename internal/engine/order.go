@@ -3,8 +3,8 @@ package engine
 import (
 	"container/heap"
 	"container/list"
-	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/nogie-dev/clob-trading/internal/models"
@@ -18,6 +18,18 @@ type OrderBook struct {
 	askLevels util.MinPriceHeap
 	Index     map[string]*list.Element
 	Ticker    string
+}
+
+type OrderBookSnapshot struct {
+	Ticker string
+	Bids   []OrderBookLevel
+	Asks   []OrderBookLevel
+}
+
+type OrderBookLevel struct {
+	Price            float64
+	Amount           float64
+	CumulativeAmount float64
 }
 
 func NewOrderBook(ticker string) *OrderBook {
@@ -199,24 +211,40 @@ func (ob *OrderBook) EditOrder(req models.EditOrderRequest) *models.BookOrder {
 	return nil
 }
 
-func (ob *OrderBook) PrintOrderBook() {
-	bidHeap := append(util.MaxPriceHeap(nil), ob.bidLevels...)
-	heap.Init(&bidHeap)
-	bidCumulative := 0.0
-	for bidHeap.Len() > 0 {
-		lvl := heap.Pop(&bidHeap).(*util.PriceLevel)
-		bidCumulative += lvl.TotalAmount
-		fmt.Printf("BID price=%.4f total=%.4f cumulative=%.4f\n", lvl.Price, lvl.TotalAmount, bidCumulative)
+func (ob *OrderBook) Snapshot(depth int) OrderBookSnapshot {
+	return OrderBookSnapshot{
+		Ticker: ob.Ticker,
+		Bids:   snapshotLevels(ob.Bids, depth, true),
+		Asks:   snapshotLevels(ob.Asks, depth, false),
+	}
+}
+
+func snapshotLevels(levels map[float64]*util.PriceLevel, depth int, desc bool) []OrderBookLevel {
+	out := make([]OrderBookLevel, 0, len(levels))
+	for _, lvl := range levels {
+		out = append(out, OrderBookLevel{
+			Price:  lvl.Price,
+			Amount: lvl.TotalAmount,
+		})
 	}
 
-	askHeap := append(util.MinPriceHeap(nil), ob.askLevels...)
-	heap.Init(&askHeap)
-	askCumulative := 0.0
-	for askHeap.Len() > 0 {
-		lvl := heap.Pop(&askHeap).(*util.PriceLevel)
-		askCumulative += lvl.TotalAmount
-		fmt.Printf("ASK price=%.4f total=%.4f cumulative=%.4f\n", lvl.Price, lvl.TotalAmount, askCumulative)
+	sort.Slice(out, func(i, j int) bool {
+		if desc {
+			return out[i].Price > out[j].Price
+		}
+		return out[i].Price < out[j].Price
+	})
+
+	if depth > 0 && depth < len(out) {
+		out = out[:depth]
 	}
+
+	cumulative := 0.0
+	for i := range out {
+		cumulative += out[i].Amount
+		out[i].CumulativeAmount = cumulative
+	}
+	return out
 }
 
 // dropPriceLevel removes an empty price level from heap and map.
