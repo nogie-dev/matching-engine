@@ -1,8 +1,14 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"sync"
+)
+
+var (
+	ErrEmptyTicker   = errors.New("empty ticker")
+	ErrUnknownTicker = errors.New("unknown ticker")
 )
 
 // Router holds book-specific workers to dispatch incoming events/orders.
@@ -22,7 +28,7 @@ func NewRouter() *Router {
 // Use at startup after restoring orderbooks from storage.
 func (r *Router) Register(ticker string, w *BookWorker) error {
 	if ticker == "" {
-		return fmt.Errorf("empty ticker")
+		return ErrEmptyTicker
 	}
 	if w == nil {
 		return fmt.Errorf("nil worker for ticker %s", ticker)
@@ -34,19 +40,42 @@ func (r *Router) Register(ticker string, w *BookWorker) error {
 }
 
 func (r *Router) OrderRouter(ev Event) error {
-	ticker := ev.Ticker
+	w, err := r.worker(ev.Ticker)
+	if err != nil {
+		return err
+	}
+
+	w.in <- ev
+	return nil
+}
+
+// OrderBookSnapshot reads a snapshot on the owning worker's event queue.
+func (r *Router) OrderBookSnapshot(ticker string, depth int) (OrderBookSnapshot, error) {
+	w, err := r.worker(ticker)
+	if err != nil {
+		return OrderBookSnapshot{}, err
+	}
+
+	result := make(chan OrderBookSnapshot, 1)
+	w.in <- Event{
+		Type:           snapshotOrderBook,
+		Ticker:         ticker,
+		snapshotDepth:  depth,
+		snapshotResult: result,
+	}
+	return <-result, nil
+}
+
+func (r *Router) worker(ticker string) (*BookWorker, error) {
 	if ticker == "" {
-		return fmt.Errorf("empty ticker")
+		return nil, ErrEmptyTicker
 	}
 
 	r.mu.RLock()
 	w := r.workers[ticker]
 	r.mu.RUnlock()
-
 	if w == nil {
-		return fmt.Errorf("unknown ticker: %s", ticker)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownTicker, ticker)
 	}
-
-	w.in <- ev
-	return nil
+	return w, nil
 }

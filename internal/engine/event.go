@@ -8,6 +8,7 @@ const (
 	NewOrder EventType = iota
 	CancelOrder
 	EditOrder
+	snapshotOrderBook
 )
 
 type Event struct {
@@ -17,4 +18,7 @@ type Event struct {
 	NewOrder  *models.CreateOrderRequest
 	CancelReq *models.CancelOrderRequest
 	EditReq   *models.EditOrderRequest
+
+	snapshotDepth  int
+	snapshotResult chan<- OrderBookSnapshot
 }

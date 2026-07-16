@@ -121,6 +121,10 @@ func (w *BookWorker) Run() {
 					logOrderResting(result.Residual, reason)
 				}
 			}
+		case snapshotOrderBook:
+			if ev.snapshotResult != nil {
+				ev.snapshotResult <- w.OrderBook.Snapshot(ev.snapshotDepth)
+			}
 		default:
 			slog.Warn("unsupported event type", "type", ev.Type)
 		}

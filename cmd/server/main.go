@@ -3,14 +3,17 @@ package main
 import (
 	"flag"
 	"log"
+	"net/http"
+	"time"
 
+	"github.com/nogie-dev/clob-trading/internal/api"
 	"github.com/nogie-dev/clob-trading/internal/config"
 	"github.com/nogie-dev/clob-trading/internal/engine"
-	"github.com/nogie-dev/clob-trading/internal/testdata"
 )
 
 func main() {
 	configPath := flag.String("config", "config/default.json", "path to JSON config file")
+	address := flag.String("addr", ":8080", "HTTP listen address")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -28,14 +31,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	for _, req := range testdata.SampleOrders {
-		ev := engine.Event{
-			Type:     engine.NewOrder,
-			Ticker:   req.Ticker,
-			NewOrder: &req,
-		}
-		if err := r.OrderRouter(ev); err != nil {
-			log.Printf("route error: %v", err)
-		}
+	server := &http.Server{
+		Addr:              *address,
+		Handler:           api.NewHandler(r),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	log.Printf("internal API listening on %s", *address)
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatal(err)
 	}
 }
