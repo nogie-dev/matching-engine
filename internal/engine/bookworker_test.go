@@ -176,3 +176,54 @@ func TestBookWorkerRejectsEditOrderPayloadTickerMismatch(t *testing.T) {
 		t.Fatal("mismatched EditOrder payload should not create edited bid level")
 	}
 }
+
+func TestRouterOrderBookSnapshotRunsAfterQueuedCommand(t *testing.T) {
+	worker := NewBookWorker("BTC-USD", nil)
+	router := NewRouter()
+	if err := router.Register("BTC-USD", worker); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		worker.Run()
+		close(done)
+	}()
+
+	if err := router.OrderRouter(Event{
+		Type:   NewOrder,
+		Ticker: "BTC-USD",
+		NewOrder: &models.CreateOrderRequest{
+			Ticker:    "BTC-USD",
+			UserID:    "alice",
+			OrderType: models.Limit,
+			Position:  models.Bid,
+			Price:     100,
+			Amount:    2,
+			Nonce:     1,
+		},
+	}); err != nil {
+		t.Fatalf("OrderRouter returned error: %v", err)
+	}
+
+	snapshot, err := router.OrderBookSnapshot("BTC-USD", 1)
+	if err != nil {
+		t.Fatalf("OrderBookSnapshot returned error: %v", err)
+	}
+	assertLevel(t, snapshot.Bids, 0, 100, 2, 2)
+
+	close(worker.in)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("worker did not stop before timeout")
+	}
+}
+
+func TestRouterOrderBookSnapshotRejectsUnknownTicker(t *testing.T) {
+	router := NewRouter()
+
+	if _, err := router.OrderBookSnapshot("ETH-USD", 1); err == nil {
+		t.Fatal("OrderBookSnapshot should reject an unknown ticker")
+	}
+}

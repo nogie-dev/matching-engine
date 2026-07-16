@@ -36,6 +36,14 @@ Design rules:
 - Orderbook reads must use a worker-owned snapshot path, not direct concurrent reads of `worker.OrderBook`.
 - Keep response DTOs small and engine-facing. Platform translates them into public user responses.
 
+Implementation shape:
+
+- Use the standard `net/http` server and method-aware `http.ServeMux`; this API does not need a framework dependency.
+- Keep HTTP transport code in `internal/api`, separate from the runnable wiring in `cmd/server` and engine behavior in `internal/engine`.
+- Handlers decode and validate requests, map engine errors to HTTP responses, and dispatch commands or queries through `Router`.
+- Route orderbook snapshots through the same worker event queue as commands so each ticker preserves command/query ordering.
+- Accept limit order commands only until market-order matching and residual behavior are defined in the engine.
+
 Verify:
 
 - Documentation-only API surface changes need path and responsibility review.

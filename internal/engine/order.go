@@ -21,15 +21,15 @@ type OrderBook struct {
 }
 
 type OrderBookSnapshot struct {
-	Ticker string
-	Bids   []OrderBookLevel
-	Asks   []OrderBookLevel
+	Ticker string           `json:"ticker"`
+	Bids   []OrderBookLevel `json:"bids"`
+	Asks   []OrderBookLevel `json:"asks"`
 }
 
 type OrderBookLevel struct {
-	Price            float64
-	Amount           float64
-	CumulativeAmount float64
+	Price            float64 `json:"price"`
+	Amount           float64 `json:"amount"`
+	CumulativeAmount float64 `json:"cumulativeAmount"`
 }
 
 func NewOrderBook(ticker string) *OrderBook {
