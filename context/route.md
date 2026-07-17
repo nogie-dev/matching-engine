@@ -1,6 +1,6 @@
 # Task Routing
 
-Use this file before acting on a user request. Pick the first matching route, read the listed context, then stop when the route's verification is satisfied.
+Use this file when the task area changes or is unclear. Pick the first matching route, read the listed context, then stop when the route's verification is satisfied.
 
 | Request type | Read first | Workflow | Stop condition |
 |---|---|---|---|
