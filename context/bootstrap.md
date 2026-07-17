@@ -5,7 +5,7 @@
 - Purpose: Go CLOB matching engine with an internal command/query HTTP API.
 - Runtime: Go, using the standard `net/http` server.
 - Primary entry point: `go run ./cmd/server`.
-- Default wiring: `cmd/server/main.go` loads `config/default.json`, registers one `BTC-USD` worker, and listens on `:8080`.
+- Default wiring: `cmd/server/main.go` requires `MATCHING_ENGINE_DATABASE_URL`, opens one shared PostgreSQL pool, registers one `BTC-USD` worker, and listens on `:8080`.
 
 ## Architecture at a Glance
 
@@ -14,8 +14,8 @@
 3. `Router` maps each ticker to one `BookWorker`. Router sends to the worker input channel are blocking; a full worker channel applies backpressure to the caller.
 4. Each `BookWorker` owns one ticker's `OrderBook` and processes commands sequentially. Order creation and amendment can invoke `Match`; cancellation and snapshots also run on the worker-owned path.
 5. `OrderBook` and `Match` implement price-time-priority matching and return raw match logs without depending on persistence code.
-6. `internal/matchlog` defines the raw append-only storage boundary, writer, and PostgreSQL store. The default server does not configure a match-log output channel, writer, or PostgreSQL store, so executed matches are not persisted by the default process.
-7. When configured, match-log output also uses a blocking channel send. Retry, durability, and failure behavior remain explicit design decisions rather than hidden asynchronous policy.
+6. `internal/matchlog` defines the raw append-only storage boundary, persistence request/commit acknowledgement, writer, and PostgreSQL store. One incoming order's logs are committed atomically and identical execution IDs are retry-safe.
+7. `BookWorker` blocks on persistence acknowledgement before continuing. A persistence error permanently halts the shared engine state, rejects new commands, and makes `GET /ready` unhealthy; recovery and replay remain issue #26 work.
 
 ## Current Surface and Boundaries
 

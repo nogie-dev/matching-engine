@@ -13,7 +13,7 @@
  
 - **BookWorker**: 페어당 1개. OrderBook + Index + Match를 소유
 - **유저 인증/잔고 검증**: 상위 User Service에서 처리한다고 가정 (점선 표시)
-- **WAL + Snapshot**: 체결 이벤트를 기록하고, 리부팅 시 리플레이하여 오더북 상태를 복원
+- **WAL + Snapshot**: 영속 주문 저널과 리플레이 복구는 후속 구현 범위
  
 ## 데이터 구조
  
@@ -60,5 +60,8 @@ clob-trading/
 ## 실행
  
 ```bash
-go run cmd/server/main.go
+export MATCHING_ENGINE_DATABASE_URL='postgres://user:password@localhost:5432/matching'
+go run ./cmd/server
 ```
+
+기본 서버는 하나의 PostgreSQL connection pool을 공유하며, 체결 로그 transaction commit ACK를 받은 뒤 다음 주문을 처리한다. DB URL이 없거나 연결할 수 없으면 시작하지 않는다. 저장 실패 시 엔진은 자동 복구 없이 `HALTED` 상태가 되고, 신규 주문 명령과 `GET /ready`가 `503 Service Unavailable`을 반환한다.

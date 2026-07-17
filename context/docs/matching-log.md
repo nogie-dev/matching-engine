@@ -14,7 +14,7 @@ Responsibilities:
 
 - `matchlog.MatchLog` is the raw engine-emitted execution event.
 - `matchlog.Store` is the storage boundary for raw logs.
-- `matchlog.Writer` owns persistence from a match log output channel to a store.
+- `matchlog.Writer` owns persistence requests and sends a commit acknowledgement back to the requesting worker.
 - `postgres.Store` appends logs with sqlc-generated pgx queries.
 - `match_logs` is plain PostgreSQL schema, not TimescaleDB-specific.
 

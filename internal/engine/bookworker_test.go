@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -62,9 +64,9 @@ func TestBookWorkerRejectsNewOrderPayloadTickerMismatch(t *testing.T) {
 }
 
 func TestBookWorkerEmitsMatchLogs(t *testing.T) {
-	logOut := make(chan []matchlog.MatchLog, 1)
+	persistenceOut := make(chan matchlog.PersistenceRequest, 1)
 	worker := NewBookWorkerWithOptions("BTC-USD", nil, BookWorkerOptions{
-		MatchLogOut: logOut,
+		PersistenceOut: persistenceOut,
 	})
 	maker := newOrder("ask-1", models.Ask, 100, 0.5)
 	maker.UserID = "maker-user"
@@ -74,6 +76,12 @@ func TestBookWorkerEmitsMatchLogs(t *testing.T) {
 	if err := router.Register("BTC-USD", worker); err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}
+	persisted := make(chan []matchlog.MatchLog, 1)
+	go func() {
+		request := <-persistenceOut
+		persisted <- request.Logs
+		request.Acknowledge(nil)
+	}()
 
 	routeAndDrain(t, router, worker, Event{
 		Type:   NewOrder,
@@ -91,7 +99,7 @@ func TestBookWorkerEmitsMatchLogs(t *testing.T) {
 
 	var logs []matchlog.MatchLog
 	select {
-	case logs = <-logOut:
+	case logs = <-persisted:
 	default:
 		t.Fatal("expected emitted match logs")
 	}
@@ -101,6 +109,139 @@ func TestBookWorkerEmitsMatchLogs(t *testing.T) {
 	}
 	if logs[0].MakerOrderID != "ask-1" || logs[0].TakerUserID != "taker-user" {
 		t.Fatalf("unexpected emitted match log: %#v", logs[0])
+	}
+}
+
+func TestBookWorkerWaitsForPersistenceBeforeNextCommand(t *testing.T) {
+	persistenceOut := make(chan matchlog.PersistenceRequest, 1)
+	worker := NewBookWorkerWithOptions("BTC-USD", nil, BookWorkerOptions{
+		PersistenceOut: persistenceOut,
+	})
+	maker := newOrder("ask-1", models.Ask, 100, 0.5)
+	maker.UserID = "maker-user"
+	worker.OrderBook.AddOrder(maker)
+
+	router := NewRouter()
+	if err := router.Register("BTC-USD", worker); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+	go worker.Run()
+
+	if err := router.OrderRouter(Event{
+		Type:   NewOrder,
+		Ticker: "BTC-USD",
+		NewOrder: &models.CreateOrderRequest{
+			Ticker:    "BTC-USD",
+			UserID:    "taker-user",
+			OrderType: models.Limit,
+			Position:  models.Bid,
+			Price:     101,
+			Amount:    0.25,
+			Nonce:     1,
+		},
+	}); err != nil {
+		t.Fatalf("route matching order: %v", err)
+	}
+
+	request := <-persistenceOut
+	if err := router.OrderRouter(Event{
+		Type:   CancelOrder,
+		Ticker: "BTC-USD",
+		CancelReq: &models.CancelOrderRequest{
+			Ticker:  "BTC-USD",
+			OrderID: maker.OrderID,
+		},
+	}); err != nil {
+		t.Fatalf("route queued cancel: %v", err)
+	}
+	if _, ok := worker.OrderBook.Index[maker.OrderID]; !ok {
+		t.Fatal("worker processed the next command before persistence acknowledgement")
+	}
+
+	request.Acknowledge(nil)
+	snapshot, err := router.OrderBookSnapshot("BTC-USD", 1)
+	if err != nil {
+		t.Fatalf("snapshot after acknowledgement: %v", err)
+	}
+	if len(snapshot.Asks) != 0 {
+		t.Fatalf("queued cancel was not processed after acknowledgement: %#v", snapshot.Asks)
+	}
+
+	shutdownRouter(t, router)
+}
+
+func TestBookWorkerPersistenceFailureHaltsRouter(t *testing.T) {
+	persistenceOut := make(chan matchlog.PersistenceRequest, 1)
+	worker := NewBookWorkerWithOptions("BTC-USD", nil, BookWorkerOptions{
+		PersistenceOut: persistenceOut,
+	})
+	maker := newOrder("ask-1", models.Ask, 100, 0.5)
+	maker.UserID = "maker-user"
+	worker.OrderBook.AddOrder(maker)
+
+	router := NewRouter()
+	if err := router.Register("BTC-USD", worker); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+	go worker.Run()
+
+	if err := router.OrderRouter(Event{
+		Type:   NewOrder,
+		Ticker: "BTC-USD",
+		NewOrder: &models.CreateOrderRequest{
+			Ticker:    "BTC-USD",
+			UserID:    "taker-user",
+			OrderType: models.Limit,
+			Position:  models.Bid,
+			Price:     101,
+			Amount:    0.25,
+			Nonce:     1,
+		},
+	}); err != nil {
+		t.Fatalf("route matching order: %v", err)
+	}
+
+	request := <-persistenceOut
+	request.Acknowledge(errors.New("database unavailable"))
+	waitForHalt(t, router)
+
+	err := router.OrderRouter(Event{
+		Type:   CancelOrder,
+		Ticker: "BTC-USD",
+		CancelReq: &models.CancelOrderRequest{
+			Ticker:  "BTC-USD",
+			OrderID: maker.OrderID,
+		},
+	})
+	if !errors.Is(err, ErrEngineHalted) {
+		t.Fatalf("halted router should return ErrEngineHalted, got %v", err)
+	}
+
+	shutdownRouter(t, router)
+}
+
+func waitForHalt(t *testing.T, router *Router) {
+	t.Helper()
+	deadline := time.After(time.Second)
+	for {
+		if errors.Is(router.Ready(), ErrEngineHalted) {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("router did not enter halted state before timeout")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func shutdownRouter(t *testing.T, router *Router) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := router.Shutdown(ctx); err != nil {
+		t.Fatalf("router shutdown: %v", err)
 	}
 }
 

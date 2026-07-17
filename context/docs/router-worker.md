@@ -13,7 +13,8 @@ Responsibilities:
 - `Router.OrderRouter` validates ticker presence, finds the worker, and sends the event.
 - `BookWorker` validates payload ticker consistency and handles event types.
 - Matching, cancel, and edit behavior belong in `BookWorker` and `OrderBook`, not `Router`.
-- `BookWorker` may emit `MatchResult.Logs` to a match log output channel.
+- `BookWorker` sends `MatchResult.Logs` as a persistence request and waits for
+  its commit acknowledgement before processing another command.
 
 Current behavior:
 
@@ -23,13 +24,18 @@ Current behavior:
   `engine.worker_input_buffer_size` in `config/default.json`.
 - Sending to a full worker channel blocks.
 - Mismatched payload ticker is logged and skipped by the worker.
-- Match log durability policy is not decided yet.
+- Persistence failure halts the shared engine state. The router rejects new
+  create, amend, and cancel commands while snapshots remain available for
+  inspection.
+- Router shutdown rejects new work, closes worker queues, and waits for them to
+  drain before the writer channel and PostgreSQL pool are closed.
 
 Workflow:
 
 1. Decide whether the request is about dispatch, backpressure, or event handling.
 2. Keep routing thin; do not move matching logic into the router.
-3. Do not add async batching, retry, drop, or backpressure policy until it is explicitly decided.
+3. Preserve blocking commit acknowledgement and fail-closed behavior; never
+   replace it with drop or unbounded buffering.
 
 Verify:
 
