@@ -276,7 +276,8 @@ func TestMatchReturnsRawMatchLogs(t *testing.T) {
 		t.Fatalf("match logs want 1, got %d", len(result.Logs))
 	}
 	log := result.Logs[0]
-	if log.Ticker != "BTC-USD" ||
+	if log.ExecutionID == "" ||
+		log.Ticker != "BTC-USD" ||
 		log.Price != 100 ||
 		log.Amount != 0.25 ||
 		log.QuoteAmount != 25 ||

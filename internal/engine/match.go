@@ -43,7 +43,7 @@ func Match(book *OrderBook, incoming *models.BookOrder) MatchResult {
 
 			tradeAmt := math.Min(incoming.Amount, target.Amount)
 			logTradeExecuted(incoming.Ticker, incoming.OrderID, target.OrderID, bestAsk.Price, tradeAmt)
-			result.Logs = append(result.Logs, newMatchLog(book.Ticker, incoming, target, bestAsk.Price, tradeAmt))
+			result.Logs = append(result.Logs, newMatchLog(book.Ticker, incoming, target, bestAsk.Price, tradeAmt, len(result.Logs)))
 			incoming.Amount -= tradeAmt
 			target.Amount -= tradeAmt
 			bestAsk.TotalAmount -= tradeAmt
@@ -75,7 +75,7 @@ func Match(book *OrderBook, incoming *models.BookOrder) MatchResult {
 
 			tradeAmt := math.Min(incoming.Amount, target.Amount)
 			logTradeExecuted(incoming.Ticker, incoming.OrderID, target.OrderID, bestBid.Price, tradeAmt)
-			result.Logs = append(result.Logs, newMatchLog(book.Ticker, incoming, target, bestBid.Price, tradeAmt))
+			result.Logs = append(result.Logs, newMatchLog(book.Ticker, incoming, target, bestBid.Price, tradeAmt, len(result.Logs)))
 			incoming.Amount -= tradeAmt
 			target.Amount -= tradeAmt
 			bestBid.TotalAmount -= tradeAmt
@@ -97,8 +97,9 @@ func Match(book *OrderBook, incoming *models.BookOrder) MatchResult {
 	return result
 }
 
-func newMatchLog(ticker string, taker, maker *models.BookOrder, price, amount float64) matchlog.MatchLog {
+func newMatchLog(ticker string, taker, maker *models.BookOrder, price, amount float64, sequence int) matchlog.MatchLog {
 	return matchlog.MatchLog{
+		ExecutionID:  matchlog.GenerateExecutionID(ticker, taker.OrderID, taker.Timestamp, sequence),
 		Ticker:       ticker,
 		Price:        price,
 		Amount:       amount,
