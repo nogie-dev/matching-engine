@@ -17,6 +17,8 @@ import (
 	"github.com/nogie-dev/clob-trading/internal/api"
 	"github.com/nogie-dev/clob-trading/internal/config"
 	"github.com/nogie-dev/clob-trading/internal/engine"
+	"github.com/nogie-dev/clob-trading/internal/journal"
+	journalpostgres "github.com/nogie-dev/clob-trading/internal/journal/postgres"
 	"github.com/nogie-dev/clob-trading/internal/matchlog"
 	matchlogpostgres "github.com/nogie-dev/clob-trading/internal/matchlog/postgres"
 )
@@ -68,7 +70,12 @@ func serve(cfg config.Config, address, databaseURL string) error {
 		return fmt.Errorf("connect PostgreSQL: %w", err)
 	}
 
-	runtime, err := startEngine(cfg, matchlogpostgres.NewStore(pool))
+	runtime, err := startEngine(
+		context.Background(),
+		cfg,
+		matchlogpostgres.NewStore(pool),
+		journalpostgres.NewStore(pool),
+	)
 	if err != nil {
 		return err
 	}
@@ -109,10 +116,16 @@ func serve(cfg config.Config, address, databaseURL string) error {
 	return errors.Join(httpShutdownErr, engineShutdownErr, listenErr)
 }
 
-func startEngine(cfg config.Config, store matchlog.Store) (*engineRuntime, error) {
+func startEngine(ctx context.Context, cfg config.Config, matchStore matchlog.Store, journalStore journal.Store) (*engineRuntime, error) {
+	if matchStore == nil {
+		return nil, matchlog.ErrStoreUnavailable
+	}
+	if journalStore == nil {
+		return nil, journal.ErrStoreUnavailable
+	}
 	persistenceOut := make(chan matchlog.PersistenceRequest, cfg.Engine.MatchLogOutputBufferSize)
 	writerDone := make(chan struct{})
-	writer := matchlog.NewWriter(store)
+	writer := matchlog.NewWriter(matchStore)
 	go func() {
 		defer close(writerDone)
 		writer.Run(context.Background(), persistenceOut)
@@ -122,7 +135,26 @@ func startEngine(cfg config.Config, store matchlog.Store) (*engineRuntime, error
 	worker := engine.NewBookWorkerWithOptions("BTC-USD", nil, engine.BookWorkerOptions{
 		InputBufferSize: cfg.Engine.WorkerInputBufferSize,
 		PersistenceOut:  persistenceOut,
+		Journal:         journalStore,
 	})
+	commands, err := journalStore.List(ctx)
+	if err != nil {
+		close(persistenceOut)
+		<-writerDone
+		return nil, fmt.Errorf("load order journal: %w", err)
+	}
+	for _, command := range commands {
+		if command.Ticker != "BTC-USD" {
+			close(persistenceOut)
+			<-writerDone
+			return nil, fmt.Errorf("unsupported journal ticker %q", command.Ticker)
+		}
+	}
+	if err := worker.Replay(commands); err != nil {
+		close(persistenceOut)
+		<-writerDone
+		return nil, fmt.Errorf("replay order journal: %w", err)
+	}
 	if err := router.Register("BTC-USD", worker); err != nil {
 		close(persistenceOut)
 		<-writerDone

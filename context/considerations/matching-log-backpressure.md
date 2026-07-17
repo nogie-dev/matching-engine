@@ -23,7 +23,8 @@ final durability policy lives in `context/docs/matching-log.md`.
 ## Current Direction
 
 - `BookWorker` should not own a `matchlog.Store` or call DB writes directly.
-- `BookWorker` may emit `MatchResult.Logs` to a match log output channel.
+- `BookWorker` sends `MatchResult.Logs` as a persistence request and waits for
+  commit acknowledgement.
 - A separate match log writer should own `matchlog.Store` and persistence.
 - Raw match logs are source-of-truth execution records, not analytics trades.
 
@@ -53,11 +54,11 @@ until recovery is verified.
 - Retry count, timeout, and operator recovery procedure.
 - Whether the first implementation halts one ticker or the whole engine.
 - Shutdown drain and restart sequencing.
-- Durable order journal format, snapshots, and replay checkpoints.
+- Snapshot/checkpoint format and replay performance optimization.
 
 Redis, Kafka, Redpanda, or NATS JetStream are not required while database
 failure intentionally stops trading. Reconsider an external durable queue
 only if a future requirement allows matching to continue while PostgreSQL is
 unavailable.
 
-Implementation is tracked in dependency order by issues #24, #25, and #26.
+Implementation was delivered in dependency order by issues #24, #25, and #26.

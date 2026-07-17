@@ -69,8 +69,10 @@ func (r *Router) OrderRouter(ev Event) error {
 		return err
 	}
 
+	result := make(chan error, 1)
+	ev.commandResult = result
 	w.in <- ev
-	return r.state.Err()
+	return <-result
 }
 
 // OrderBookSnapshot reads a snapshot on the owning worker's event queue.

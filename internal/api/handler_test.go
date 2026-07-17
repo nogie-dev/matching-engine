@@ -11,8 +11,24 @@ import (
 	"time"
 
 	"github.com/nogie-dev/clob-trading/internal/engine"
+	"github.com/nogie-dev/clob-trading/internal/journal"
 	"github.com/nogie-dev/clob-trading/internal/models"
 )
+
+type testJournal struct {
+	sequence int64
+}
+
+func (j *testJournal) Append(_ context.Context, command journal.Command) (journal.AppendResult, error) {
+	j.sequence++
+	command.Sequence = j.sequence
+	command.RecordedAt = time.Date(2026, 7, 17, 12, 0, 0, int(j.sequence), time.UTC)
+	return journal.AppendResult{Command: command, Inserted: true}, nil
+}
+
+func (j *testJournal) List(context.Context) ([]journal.Command, error) {
+	return nil, nil
+}
 
 func TestOrderBookQuery(t *testing.T) {
 	book := engine.NewOrderBook("BTC-USD")
@@ -53,6 +69,7 @@ func TestOrderBookQuery(t *testing.T) {
 func TestCreateOrderCommand(t *testing.T) {
 	handler, router := newTestHandler(t, nil)
 	body := []byte(`{
+		"command_id":"create-1",
 		"ticker":"BTC-USD",
 		"user_id":"alice",
 		"order_type":"LIMIT",
@@ -83,10 +100,11 @@ func TestAmendAndCancelOrderCommands(t *testing.T) {
 
 	amendedAmount := 1.0
 	amendBody, err := json.Marshal(models.EditOrderRequest{
-		Ticker:  "BTC-USD",
-		OrderID: "bid-1",
-		Price:   100,
-		Amount:  &amendedAmount,
+		CommandID: "amend-1",
+		Ticker:    "BTC-USD",
+		OrderID:   "bid-1",
+		Price:     100,
+		Amount:    &amendedAmount,
 	})
 	if err != nil {
 		t.Fatalf("marshal amend request: %v", err)
@@ -104,7 +122,7 @@ func TestAmendAndCancelOrderCommands(t *testing.T) {
 		t.Fatalf("amend command was not processed: %#v", snapshot)
 	}
 
-	cancelBody, err := json.Marshal(models.CancelOrderRequest{Ticker: "BTC-USD", OrderID: "bid-1"})
+	cancelBody, err := json.Marshal(models.CancelOrderRequest{CommandID: "cancel-1", Ticker: "BTC-USD", OrderID: "bid-1"})
 	if err != nil {
 		t.Fatalf("marshal cancel request: %v", err)
 	}
@@ -135,10 +153,10 @@ func TestHandlerRejectsInvalidRequestsAndUnknownTickers(t *testing.T) {
 		{name: "unknown query ticker", method: http.MethodGet, target: "/queries/orderbook?ticker=ETH-USD&depth=1", status: http.StatusNotFound},
 		{name: "malformed create", method: http.MethodPost, target: "/commands/orders/create", body: `{`, status: http.StatusBadRequest},
 		{name: "invalid create", method: http.MethodPost, target: "/commands/orders/create", body: `{"ticker":"BTC-USD"}`, status: http.StatusBadRequest},
-		{name: "unsupported market order", method: http.MethodPost, target: "/commands/orders/create", body: `{"ticker":"BTC-USD","user_id":"alice","order_type":"MARKET","position":"BID","price":100,"amount":1}`, status: http.StatusBadRequest},
-		{name: "unknown create ticker", method: http.MethodPost, target: "/commands/orders/create", body: `{"ticker":"ETH-USD","user_id":"alice","order_type":"LIMIT","position":"BID","price":100,"amount":1}`, status: http.StatusNotFound},
-		{name: "invalid amend", method: http.MethodPost, target: "/commands/orders/amend", body: `{"ticker":"BTC-USD","order_id":"id","price":100,"amount":0}`, status: http.StatusBadRequest},
-		{name: "invalid cancel", method: http.MethodPost, target: "/commands/orders/cancel", body: `{"ticker":"BTC-USD"}`, status: http.StatusBadRequest},
+		{name: "unsupported market order", method: http.MethodPost, target: "/commands/orders/create", body: `{"command_id":"create-1","ticker":"BTC-USD","user_id":"alice","order_type":"MARKET","position":"BID","price":100,"amount":1}`, status: http.StatusBadRequest},
+		{name: "unknown create ticker", method: http.MethodPost, target: "/commands/orders/create", body: `{"command_id":"create-1","ticker":"ETH-USD","user_id":"alice","order_type":"LIMIT","position":"BID","price":100,"amount":1}`, status: http.StatusNotFound},
+		{name: "invalid amend", method: http.MethodPost, target: "/commands/orders/amend", body: `{"command_id":"amend-1","ticker":"BTC-USD","order_id":"id","price":100,"amount":0}`, status: http.StatusBadRequest},
+		{name: "invalid cancel", method: http.MethodPost, target: "/commands/orders/cancel", body: `{"command_id":"cancel-1","ticker":"BTC-USD"}`, status: http.StatusBadRequest},
 	}
 
 	for _, test := range tests {
@@ -183,6 +201,7 @@ func TestReadinessAndCommandsFailWhenEngineHalted(t *testing.T) {
 	}
 
 	response := serveJSON(handler, "/commands/orders/create", []byte(`{
+		"command_id":"create-1",
 		"ticker":"BTC-USD",
 		"user_id":"alice",
 		"order_type":"LIMIT",
@@ -199,7 +218,7 @@ func TestReadinessAndCommandsFailWhenEngineHalted(t *testing.T) {
 func newTestHandler(t *testing.T, book *engine.OrderBook) (http.Handler, *engine.Router) {
 	t.Helper()
 
-	worker := engine.NewBookWorker("BTC-USD", book)
+	worker := engine.NewBookWorkerWithOptions("BTC-USD", book, engine.BookWorkerOptions{Journal: &testJournal{}})
 	router := engine.NewRouter()
 	if err := router.Register("BTC-USD", worker); err != nil {
 		t.Fatalf("Register returned error: %v", err)

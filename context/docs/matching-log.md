@@ -33,9 +33,8 @@ Durability policy:
   commit outcome is unknown. Never drop a log or continue in degraded mode.
 - Use shared connection pooling for connection reuse and limits, not as a
   substitute for transactional durability.
-- Add a durable order journal and deterministic replay before claiming
-  process-crash recovery. Until then, fail closed and require recovery before
-  resuming trading.
+- Use the durable order journal and deterministic startup replay to reconstruct
+  process state and reconcile missing match logs before serving traffic.
 
 Implementation sequence:
 
@@ -44,7 +43,7 @@ Implementation sequence:
 2. Issue #25 adds commit acknowledgement, shared connection-pool wiring, and
    fail-closed engine halt behavior. It depends on #24.
 3. Issue #26 adds a durable order journal and deterministic replay recovery.
-   It depends on #24 and #25.
+   It depends on #24 and #25. See `context/docs/order-journal.md`.
 
 Out of scope:
 

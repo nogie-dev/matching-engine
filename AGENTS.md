@@ -16,7 +16,7 @@ When creating, inspecting, editing, triaging, or linking GitHub issues, use the 
 
 ## Project Structure & Module Organization
 
-This is a Go CLOB trading engine. The runnable entry point is `cmd/server/main.go`. Core matching and order book logic lives in `internal/engine`, raw matching log boundaries live in `internal/matchlog`, shared domain types in `internal/models`, and utilities such as heaps and queues in `internal/util`. SQL migrations are in `db/migrations`, hand-written queries in `db/query`, and sqlc output in `internal/matchlog/postgres/db`. Keep diagrams and static documentation assets in `asset/`, longer learning notes in `til/`, and compact agent context in `context/`.
+This is a Go CLOB trading engine. The runnable entry point is `cmd/server/main.go`. Core matching and order book logic lives in `internal/engine`, durable command journal boundaries in `internal/journal`, raw matching log boundaries in `internal/matchlog`, shared domain types in `internal/models`, and utilities such as heaps and queues in `internal/util`. SQL migrations are in `db/migrations`, hand-written queries in `db/query`, and sqlc output lives under each PostgreSQL persistence package. Keep diagrams and static documentation assets in `asset/`, longer learning notes in `til/`, and compact agent context in `context/`.
 
 ## Build, Test, and Development Commands
 
