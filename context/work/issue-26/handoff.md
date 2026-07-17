@@ -1,9 +1,9 @@
 ---
 work_item: issue-26
 branch: "feat/26-durable-order-journal-replay"
-status: in_review
+status: completed
 updated: 2026-07-17
-issue_or_pr: "https://github.com/nogie-dev/matching-engine/issues/26"
+issue_or_pr: "https://github.com/nogie-dev/matching-engine/pull/30"
 ---
 
 # Work Handoff
@@ -24,10 +24,11 @@ Commit every accepted order command to an append-only PostgreSQL journal before 
 - Added startup replay before HTTP listen and reconciliation through the idempotent match-log store.
 - Added recovery documentation covering invariants, startup, operator procedure, conflict handling, and deferred snapshots.
 - Added journal failure, crash/restart, replay determinism, duplicate command, reconciliation, amend, and cancel tests.
+- Opened draft PR #30 with `Closes #26` and the required `command_id` API contract documented.
 
 ## Remaining
 
-- Open and merge the issue #26 implementation PR, then confirm the issue closes.
+- None. PR #30 is ready for CI review and merge.
 
 ## Decisions
 
@@ -61,4 +62,4 @@ Commit every accepted order command to an append-only PostgreSQL journal before 
 
 ## Next Action
 
-Review the final diff, commit it, and open the issue #26 PR.
+After PR #30 merges, verify all three follow-up issues and the final `main` branch state.
