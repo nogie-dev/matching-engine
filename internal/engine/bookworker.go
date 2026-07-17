@@ -10,14 +10,17 @@ const DefaultWorkerInputBufferSize = 128
 
 type BookWorkerOptions struct {
 	InputBufferSize int
-	MatchLogOut     chan<- []matchlog.MatchLog
+	PersistenceOut  chan<- matchlog.PersistenceRequest
+	State           *EngineState
 }
 
 type BookWorker struct {
-	ticker      string
-	OrderBook   *OrderBook
-	in          chan Event
-	matchLogOut chan<- []matchlog.MatchLog
+	ticker         string
+	OrderBook      *OrderBook
+	in             chan Event
+	persistenceOut chan<- matchlog.PersistenceRequest
+	state          *EngineState
+	done           chan struct{}
 }
 
 // NewBookWorker owns one orderbook per ticker and consumes events over its input channel.
@@ -34,17 +37,28 @@ func NewBookWorkerWithOptions(ticker string, ob *OrderBook, opts BookWorkerOptio
 	if bufferSize <= 0 {
 		bufferSize = DefaultWorkerInputBufferSize
 	}
+	state := opts.State
+	if state == nil {
+		state = NewEngineState()
+	}
 	return &BookWorker{
-		ticker:      ticker,
-		OrderBook:   ob,
-		in:          make(chan Event, bufferSize),
-		matchLogOut: opts.MatchLogOut,
+		ticker:         ticker,
+		OrderBook:      ob,
+		in:             make(chan Event, bufferSize),
+		persistenceOut: opts.PersistenceOut,
+		state:          state,
+		done:           make(chan struct{}),
 	}
 }
 
 // Run processes events until the channel is closed.
 func (w *BookWorker) Run() {
+	defer close(w.done)
 	for ev := range w.in {
+		if isCommandEvent(ev.Type) && w.state.Err() != nil {
+			continue
+		}
+
 		// Basic ticker guard to avoid misroutes.
 		if ev.Ticker != "" && ev.Ticker != w.ticker {
 			slog.Warn("mismatched ticker", "got", ev.Ticker, "worker", w.ticker)
@@ -69,7 +83,10 @@ func (w *BookWorker) Run() {
 			originalAmount := order.Amount
 			logOrderReceived(&order)
 			result := Match(w.OrderBook, &order)
-			w.emitMatchLogs(result.Logs)
+			if err := w.persistMatchLogs(result.Logs); err != nil {
+				w.halt(err)
+				continue
+			}
 			if result.Residual != nil {
 				w.OrderBook.AddOrder(result.Residual)
 				reason := "no_match"
@@ -111,7 +128,10 @@ func (w *BookWorker) Run() {
 			if updated != nil {
 				originalAmount := updated.Amount
 				result := Match(w.OrderBook, updated)
-				w.emitMatchLogs(result.Logs)
+				if err := w.persistMatchLogs(result.Logs); err != nil {
+					w.halt(err)
+					continue
+				}
 				if result.Residual != nil {
 					w.OrderBook.AddOrder(result.Residual)
 					reason := "no_match"
@@ -131,9 +151,32 @@ func (w *BookWorker) Run() {
 	}
 }
 
-func (w *BookWorker) emitMatchLogs(logs []matchlog.MatchLog) {
-	if len(logs) == 0 || w.matchLogOut == nil {
-		return
+func (w *BookWorker) persistMatchLogs(logs []matchlog.MatchLog) error {
+	if len(logs) == 0 {
+		return nil
 	}
-	w.matchLogOut <- logs
+	if w.persistenceOut == nil {
+		return matchlog.ErrStoreUnavailable
+	}
+
+	request := matchlog.NewPersistenceRequest(logs)
+	w.persistenceOut <- request
+	return request.Wait()
+}
+
+func (w *BookWorker) halt(err error) {
+	w.state.Halt(err)
+	slog.Error("matching engine halted", "ticker", w.ticker, "error", err)
+}
+
+func (w *BookWorker) Done() <-chan struct{} {
+	return w.done
+}
+
+func (w *BookWorker) Err() error {
+	return w.state.Err()
+}
+
+func isCommandEvent(eventType EventType) bool {
+	return eventType == NewOrder || eventType == EditOrder || eventType == CancelOrder
 }

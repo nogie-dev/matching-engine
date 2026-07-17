@@ -2,10 +2,13 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/nogie-dev/clob-trading/internal/engine"
 	"github.com/nogie-dev/clob-trading/internal/models"
@@ -155,6 +158,44 @@ func TestHandlerRejectsInvalidRequestsAndUnknownTickers(t *testing.T) {
 	}
 }
 
+func TestReadinessAndCommandsFailWhenEngineHalted(t *testing.T) {
+	state := engine.NewEngineState()
+	worker := engine.NewBookWorkerWithOptions("BTC-USD", nil, engine.BookWorkerOptions{State: state})
+	router := engine.NewRouterWithState(state)
+	if err := router.Register("BTC-USD", worker); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+	go worker.Run()
+	t.Cleanup(func() { shutdownRouter(t, router) })
+	handler := NewHandler(router)
+
+	ready := httptest.NewRecorder()
+	handler.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	if ready.Code != http.StatusOK {
+		t.Fatalf("ready status want %d, got %d: %s", http.StatusOK, ready.Code, ready.Body.String())
+	}
+
+	state.Halt(errors.New("database unavailable"))
+	unhealthy := httptest.NewRecorder()
+	handler.ServeHTTP(unhealthy, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	if unhealthy.Code != http.StatusServiceUnavailable {
+		t.Fatalf("halted readiness status want %d, got %d: %s", http.StatusServiceUnavailable, unhealthy.Code, unhealthy.Body.String())
+	}
+
+	response := serveJSON(handler, "/commands/orders/create", []byte(`{
+		"ticker":"BTC-USD",
+		"user_id":"alice",
+		"order_type":"LIMIT",
+		"position":"BID",
+		"price":100,
+		"amount":1,
+		"nonce":1
+	}`))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("halted command status want %d, got %d: %s", http.StatusServiceUnavailable, response.Code, response.Body.String())
+	}
+}
+
 func newTestHandler(t *testing.T, book *engine.OrderBook) (http.Handler, *engine.Router) {
 	t.Helper()
 
@@ -164,7 +205,17 @@ func newTestHandler(t *testing.T, book *engine.OrderBook) (http.Handler, *engine
 		t.Fatalf("Register returned error: %v", err)
 	}
 	go worker.Run()
+	t.Cleanup(func() { shutdownRouter(t, router) })
 	return NewHandler(router), router
+}
+
+func shutdownRouter(t *testing.T, router *engine.Router) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := router.Shutdown(ctx); err != nil {
+		t.Fatalf("router shutdown: %v", err)
+	}
 }
 
 func serveJSON(handler http.Handler, target string, body []byte) *httptest.ResponseRecorder {

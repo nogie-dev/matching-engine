@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -9,18 +10,29 @@ import (
 var (
 	ErrEmptyTicker   = errors.New("empty ticker")
 	ErrUnknownTicker = errors.New("unknown ticker")
+	ErrRouterClosed  = errors.New("router closed")
 )
 
 // Router holds book-specific workers to dispatch incoming events/orders.
 type Router struct {
 	mu      sync.RWMutex
 	workers map[string]*BookWorker
+	state   *EngineState
+	closed  bool
 }
 
 // NewRouter initializes an empty router with no workers.
 func NewRouter() *Router {
+	return NewRouterWithState(NewEngineState())
+}
+
+func NewRouterWithState(state *EngineState) *Router {
+	if state == nil {
+		state = NewEngineState()
+	}
 	return &Router{
 		workers: make(map[string]*BookWorker),
+		state:   state,
 	}
 }
 
@@ -35,23 +47,40 @@ func (r *Router) Register(ticker string, w *BookWorker) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.closed {
+		return ErrRouterClosed
+	}
+	w.state = r.state
 	r.workers[ticker] = w
 	return nil
 }
 
 func (r *Router) OrderRouter(ev Event) error {
-	w, err := r.worker(ev.Ticker)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed {
+		return ErrRouterClosed
+	}
+	w, err := r.workerLocked(ev.Ticker)
 	if err != nil {
+		return err
+	}
+	if err := r.state.Err(); err != nil {
 		return err
 	}
 
 	w.in <- ev
-	return nil
+	return r.state.Err()
 }
 
 // OrderBookSnapshot reads a snapshot on the owning worker's event queue.
 func (r *Router) OrderBookSnapshot(ticker string, depth int) (OrderBookSnapshot, error) {
-	w, err := r.worker(ticker)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed {
+		return OrderBookSnapshot{}, ErrRouterClosed
+	}
+	w, err := r.workerLocked(ticker)
 	if err != nil {
 		return OrderBookSnapshot{}, err
 	}
@@ -66,14 +95,45 @@ func (r *Router) OrderBookSnapshot(ticker string, depth int) (OrderBookSnapshot,
 	return <-result, nil
 }
 
-func (r *Router) worker(ticker string) (*BookWorker, error) {
+func (r *Router) Ready() error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed {
+		return ErrRouterClosed
+	}
+	return r.state.Err()
+}
+
+func (r *Router) Shutdown(ctx context.Context) error {
+	r.mu.Lock()
+	workers := make(map[*BookWorker]struct{}, len(r.workers))
+	for _, worker := range r.workers {
+		workers[worker] = struct{}{}
+	}
+	if !r.closed {
+		r.closed = true
+		for worker := range workers {
+			close(worker.in)
+		}
+	}
+	r.mu.Unlock()
+
+	for worker := range workers {
+		select {
+		case <-worker.Done():
+		case <-ctx.Done():
+			return fmt.Errorf("shutdown workers: %w", ctx.Err())
+		}
+	}
+	return nil
+}
+
+func (r *Router) workerLocked(ticker string) (*BookWorker, error) {
 	if ticker == "" {
 		return nil, ErrEmptyTicker
 	}
 
-	r.mu.RLock()
 	w := r.workers[ticker]
-	r.mu.RUnlock()
 	if w == nil {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownTicker, ticker)
 	}

@@ -29,11 +29,20 @@ type errorResponse struct {
 func NewHandler(router *engine.Router) http.Handler {
 	h := &handler{router: router}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /ready", h.ready)
 	mux.HandleFunc("GET /queries/orderbook", h.orderBook)
 	mux.HandleFunc("POST /commands/orders/create", h.createOrder)
 	mux.HandleFunc("POST /commands/orders/amend", h.amendOrder)
 	mux.HandleFunc("POST /commands/orders/cancel", h.cancelOrder)
 	return mux
+}
+
+func (h *handler) ready(w http.ResponseWriter, _ *http.Request) {
+	if err := h.router.Ready(); err != nil {
+		writeEngineError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, statusResponse{Status: "ready"})
 }
 
 func (h *handler) orderBook(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +141,10 @@ func writeEngineError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "unknown ticker")
 	case errors.Is(err, engine.ErrEmptyTicker):
 		writeError(w, http.StatusBadRequest, "invalid request")
+	case errors.Is(err, engine.ErrEngineHalted):
+		writeError(w, http.StatusServiceUnavailable, "engine halted")
+	case errors.Is(err, engine.ErrRouterClosed):
+		writeError(w, http.StatusServiceUnavailable, "engine unavailable")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}
