@@ -1,7 +1,7 @@
 ---
 work_item: issue-14
 branch: "docs/14-db-write-strategy"
-status: in_review
+status: completed
 updated: 2026-07-17
 issue_or_pr: "https://github.com/nogie-dev/matching-engine/pull/27"
 ---
@@ -24,10 +24,11 @@ Decide and document a zero-loss persistence policy for raw match logs. Split imp
 - Updated issue #14 with the final decision, failure modes, test strategy, and follow-up links.
 - Promoted the decision into `context/docs/matching-log.md` and marked the backpressure consideration decided.
 - Opened draft PR #27 with `Closes #14` and the dependency-ordered follow-up list.
+- Marked PR #27 ready after its required Go CI workflow passed.
 
 ## Remaining
 
-- Merge PR #27 after required checks pass; confirm that issue #14 closes automatically.
+- None. PR #27 is ready to merge and issue #14 will close through `Closes #14`.
 
 ## Decisions
 
@@ -56,7 +57,8 @@ Decide and document a zero-loss persistence policy for raw match logs. Split imp
 
 - Issue #14, issue #15, PR #16, current code, and repository context were inspected on 2026-07-17.
 - `git diff --check`, `go vet ./...`, and `go test ./...` passed before PR #27 was opened.
+- PR #27 Go CI run 22 completed successfully.
 
 ## Next Action
 
-Wait for PR #27 checks, mark it ready, merge it, and confirm issue #14 is closed.
+After PR #27 merges, start issue #24 from the updated `main` branch.
