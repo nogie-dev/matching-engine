@@ -1,9 +1,9 @@
 ---
 work_item: issue-25
 branch: "feat/25-fail-closed-matchlog-persistence"
-status: in_review
+status: completed
 updated: 2026-07-17
-issue_or_pr: "https://github.com/nogie-dev/matching-engine/issues/25"
+issue_or_pr: "https://github.com/nogie-dev/matching-engine/pull/29"
 ---
 
 # Work Handoff
@@ -23,10 +23,11 @@ Make PostgreSQL commit acknowledgement part of the worker control flow, halt the
 - Wired the default server to a required environment-supplied database URL, one shared `pgxpool.Pool`, the transactional store, and the writer.
 - Added ordered shutdown that stops HTTP intake, drains workers and persistence acknowledgements, then closes the pool.
 - Updated bootstrap, router/worker, API, match-log, and README facts to match the new runtime behavior.
+- Opened draft PR #29 with `Closes #25` and the issue #26 crash-recovery boundary documented.
 
 ## Remaining
 
-- Open and merge the issue #25 implementation PR, then confirm the issue closes.
+- None. PR #29 is ready for CI review and merge.
 
 ## Decisions
 
@@ -57,4 +58,4 @@ Make PostgreSQL commit acknowledgement part of the worker control flow, halt the
 
 ## Next Action
 
-Commit the verified diff and open the issue #25 PR.
+After PR #29 merges, start issue #26 from the updated `main` branch.
