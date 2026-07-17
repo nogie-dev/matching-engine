@@ -12,6 +12,8 @@ Responsibilities:
 - `Router` maps `Ticker` to `BookWorker`.
 - `Router.OrderRouter` validates ticker presence, finds the worker, and sends the event.
 - `BookWorker` validates payload ticker consistency and handles event types.
+- `BookWorker` appends validated commands to the durable journal before any
+  orderbook mutation.
 - Matching, cancel, and edit behavior belong in `BookWorker` and `OrderBook`, not `Router`.
 - `BookWorker` sends `MatchResult.Logs` as a persistence request and waits for
   its commit acknowledgement before processing another command.
@@ -29,6 +31,8 @@ Current behavior:
   inspection.
 - Router shutdown rejects new work, closes worker queues, and waits for them to
   drain before the writer channel and PostgreSQL pool are closed.
+- `Router.OrderRouter` waits for the worker's command result, so success means
+  journal and match-log commit acknowledgement have completed.
 
 Workflow:
 

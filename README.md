@@ -9,11 +9,11 @@
   <img src="./asset/architecture.png" alt="CLOB Trading Architecture" width="720"/>
 </p>
  
-요청이 API Gateway를 통해 들어오면 Router가 트레이딩 페어별로 분기하고, 각 BookWorker가 자신의 오더북에서 독립적으로 주문을 처리한다. 매칭 알고리즘(`Match`)은 오더북을 직접 참조하는 순수 함수로, 페어별 싱글 스레드에서 동작한다.
+요청이 API Gateway를 통해 들어오면 Router가 트레이딩 페어별로 분기하고, 각 BookWorker가 명령을 PostgreSQL journal에 먼저 기록한 뒤 자신의 오더북에서 순차 처리한다. 매칭 알고리즘(`Match`)은 오더북을 직접 참조하며, 페어별 싱글 스레드에서 동작한다.
  
 - **BookWorker**: 페어당 1개. OrderBook + Index + Match를 소유
 - **유저 인증/잔고 검증**: 상위 User Service에서 처리한다고 가정 (점선 표시)
-- **WAL + Snapshot**: 영속 주문 저널과 리플레이 복구는 후속 구현 범위
+- **영속 journal + replay**: ticker sequence 순서로 명령을 재생하고 누락 체결 로그를 멱등적으로 복구
  
 ## 데이터 구조
  
@@ -52,8 +52,12 @@ Bid 진입 → bestAsk와 비교 → price 교차 시 tradeAmt = min(incoming, t
 clob-trading/
 ├── cmd/server/          # 서버 엔트리포인트
 ├── internal/
-│   ├── engine/          # OrderBook, Heap, Match 알고리즘
-│   └── models/          # BookOrder, PriceLevel 등 도메인 모델
+│   ├── api/             # 내부 command/query HTTP API
+│   ├── engine/          # OrderBook, worker, Match 알고리즘
+│   ├── journal/         # 영속 주문 명령과 replay 경계
+│   ├── matchlog/        # 원시 체결 로그와 PostgreSQL 저장 경계
+│   └── models/          # 주문 요청과 도메인 모델
+├── db/                  # PostgreSQL migration과 sqlc query
 └── til/                 # 학습 메모
 ```
  
@@ -65,3 +69,5 @@ go run ./cmd/server
 ```
 
 기본 서버는 하나의 PostgreSQL connection pool을 공유하며, 체결 로그 transaction commit ACK를 받은 뒤 다음 주문을 처리한다. DB URL이 없거나 연결할 수 없으면 시작하지 않는다. 저장 실패 시 엔진은 자동 복구 없이 `HALTED` 상태가 되고, 신규 주문 명령과 `GET /ready`가 `503 Service Unavailable`을 반환한다.
+
+create/amend/cancel 요청은 upstream에서 재시도에도 유지되는 `command_id`를 반드시 포함해야 한다. 서버는 journal append와 필요한 체결 로그 commit이 끝난 뒤에만 명령 성공을 반환한다. 재시작 시 journal replay와 로그 정합성 복구가 완료되기 전에는 HTTP 서버를 열지 않는다.

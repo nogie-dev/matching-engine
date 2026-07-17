@@ -15,7 +15,8 @@
 4. Each `BookWorker` owns one ticker's `OrderBook` and processes commands sequentially. Order creation and amendment can invoke `Match`; cancellation and snapshots also run on the worker-owned path.
 5. `OrderBook` and `Match` implement price-time-priority matching and return raw match logs without depending on persistence code.
 6. `internal/matchlog` defines the raw append-only storage boundary, persistence request/commit acknowledgement, writer, and PostgreSQL store. One incoming order's logs are committed atomically and identical execution IDs are retry-safe.
-7. `BookWorker` blocks on persistence acknowledgement before continuing. A persistence error permanently halts the shared engine state, rejects new commands, and makes `GET /ready` unhealthy; recovery and replay remain issue #26 work.
+7. Every accepted command is committed to the PostgreSQL order journal before mutation. Startup replays ticker-local sequences and reconciles match logs before the HTTP server opens.
+8. `BookWorker` blocks on persistence acknowledgement before continuing. A journal or match-log error permanently halts the shared engine state, rejects new commands, and makes `GET /ready` unhealthy; recovery requires a clean restart and successful replay.
 
 ## Current Surface and Boundaries
 

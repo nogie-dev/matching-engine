@@ -16,6 +16,7 @@ In scope:
   - `POST /commands/orders/create` creates an order command.
   - `POST /commands/orders/amend` amends an active order.
   - `POST /commands/orders/cancel` cancels an active order; it does not erase history.
+  - Every command requires a stable upstream `command_id` used for journal idempotency.
 - Query API:
   - `GET /queries/orderbook?ticker={ticker}&depth=N` returns aggregated price levels from an orderbook snapshot.
 - Readiness API:
@@ -46,6 +47,9 @@ Implementation shape:
 - Handlers decode and validate requests, map engine errors to HTTP responses, and dispatch commands or queries through `Router`.
 - Route orderbook snapshots through the same worker event queue as commands so each ticker preserves command/query ordering.
 - Map fail-closed engine state to `503 Service Unavailable` for commands and readiness.
+- Return command success only after the durable journal append and any
+  match-log commit acknowledgement finish; queue enqueueing alone is not an
+  accepted command.
 - Accept limit order commands only until market-order matching and residual behavior are defined in the engine.
 
 Verify:

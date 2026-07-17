@@ -91,7 +91,7 @@ func (h *handler) amendOrder(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) cancelOrder(w http.ResponseWriter, r *http.Request) {
 	var request models.CancelOrderRequest
-	if !decodeJSON(w, r, &request) || strings.TrimSpace(request.Ticker) == "" || strings.TrimSpace(request.OrderID) == "" {
+	if !decodeJSON(w, r, &request) || strings.TrimSpace(request.CommandID) == "" || strings.TrimSpace(request.Ticker) == "" || strings.TrimSpace(request.OrderID) == "" {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
@@ -112,7 +112,8 @@ func (h *handler) acceptCommand(w http.ResponseWriter, event engine.Event) {
 }
 
 func validCreateOrder(request models.CreateOrderRequest) bool {
-	return strings.TrimSpace(request.Ticker) != "" &&
+	return strings.TrimSpace(request.CommandID) != "" &&
+		strings.TrimSpace(request.Ticker) != "" &&
 		strings.TrimSpace(request.UserID) != "" &&
 		request.OrderType == models.Limit &&
 		(request.Position == models.Bid || request.Position == models.Ask) &&
@@ -120,7 +121,8 @@ func validCreateOrder(request models.CreateOrderRequest) bool {
 }
 
 func validEditOrder(request models.EditOrderRequest) bool {
-	return strings.TrimSpace(request.Ticker) != "" &&
+	return strings.TrimSpace(request.CommandID) != "" &&
+		strings.TrimSpace(request.Ticker) != "" &&
 		strings.TrimSpace(request.OrderID) != "" &&
 		request.Price > 0 &&
 		(request.Amount == nil || *request.Amount > 0)

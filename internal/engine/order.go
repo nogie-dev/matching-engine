@@ -56,6 +56,10 @@ func (ob *OrderBook) side(order *models.BookOrder) (map[float64]*util.PriceLevel
 }
 
 func CreateOrder(req models.CreateOrderRequest) models.BookOrder {
+	return CreateOrderAt(req, time.Now())
+}
+
+func CreateOrderAt(req models.CreateOrderRequest, recordedAt time.Time) models.BookOrder {
 	return models.BookOrder{
 		OrderID:   util.GenerateOrderID(req),
 		Ticker:    req.Ticker,
@@ -65,7 +69,7 @@ func CreateOrder(req models.CreateOrderRequest) models.BookOrder {
 		Price:     req.Price,
 		Amount:    req.Amount,
 		Status:    models.Pending,
-		Timestamp: time.Now(),
+		Timestamp: recordedAt,
 		Nonce:     req.Nonce,
 	}
 }
@@ -158,6 +162,10 @@ func (ob *OrderBook) removeElement(lvl *util.PriceLevel, levels map[float64]*uti
 }
 
 func (ob *OrderBook) EditOrder(req models.EditOrderRequest) *models.BookOrder {
+	return ob.EditOrderAt(req, time.Now())
+}
+
+func (ob *OrderBook) EditOrderAt(req models.EditOrderRequest, recordedAt time.Time) *models.BookOrder {
 	elem, ok := ob.Index[req.OrderID]
 	if !ok || elem == nil {
 		slog.Warn("order not found", "orderID", req.OrderID)
@@ -185,7 +193,7 @@ func (ob *OrderBook) EditOrder(req models.EditOrderRequest) *models.BookOrder {
 		if req.Amount != nil {
 			existing.Amount = *req.Amount
 		}
-		existing.Timestamp = time.Now()
+		existing.Timestamp = recordedAt
 		logOrderEdited(existing, "price_changed")
 		return existing
 	}
@@ -196,13 +204,13 @@ func (ob *OrderBook) EditOrder(req models.EditOrderRequest) *models.BookOrder {
 			// 수량 증가: 우선순위 리셋을 위해 제거 후 재삽입
 			ob.removeElement(lvl, levels, h, elem, existing.Amount)
 			existing.Amount = *req.Amount
-			existing.Timestamp = time.Now()
+			existing.Timestamp = recordedAt
 			ob.AddOrder(existing)
 			logOrderEdited(existing, "amount_increased")
 		} else {
 			// 수량 감소: 위치 유지, 누적만 반영
 			existing.Amount = *req.Amount
-			existing.Timestamp = time.Now()
+			existing.Timestamp = recordedAt
 			lvl.TotalAmount += delta
 			logOrderEdited(existing, "amount_decreased")
 		}
