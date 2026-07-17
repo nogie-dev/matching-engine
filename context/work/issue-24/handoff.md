@@ -1,9 +1,9 @@
 ---
 work_item: issue-24
 branch: "feat/24-idempotent-matchlog-persistence"
-status: in_review
+status: completed
 updated: 2026-07-17
-issue_or_pr: "https://github.com/nogie-dev/matching-engine/issues/24"
+issue_or_pr: "https://github.com/nogie-dev/matching-engine/pull/28"
 ---
 
 # Work Handoff
@@ -22,10 +22,11 @@ Persist every match log produced by one incoming order in a single PostgreSQL tr
 - Made each `SaveMatchLogs` batch atomic, idempotent for identical retries, and conflicting for reused IDs with different payloads.
 - Required `MatchedAt` instead of generating persistence-time data that would make retry payloads unstable.
 - Added rollback, identical retry, conflicting retry, and ambiguous commit retry tests.
+- Opened draft PR #28 with `Closes #24` and the issue #25/#26 durability boundaries documented.
 
 ## Remaining
 
-- Open and merge the issue #24 implementation PR, then confirm the issue closes.
+- None. PR #28 is ready for CI review and merge.
 
 ## Decisions
 
@@ -56,4 +57,4 @@ Persist every match log produced by one incoming order in a single PostgreSQL tr
 
 ## Next Action
 
-Review the final diff, commit it, and open the issue #24 PR.
+After PR #28 merges, start issue #25 from the updated `main` branch.
